@@ -335,9 +335,21 @@ def download_hrrr_data(
         else:
             # Download full GRIB2 file
             logger.info("Downloading full GRIB2 file")
-            output_path = H.download(str(output_dir))
-            logger.info(f"Downloaded to {output_path}")
-            output_path = Path(output_path)  # Convert back to Path object
+            # Herbie downloads to its cache by default, get the path
+            downloaded_path = H.download(str(output_dir))
+            logger.info(f"Herbie downloaded to {downloaded_path}")
+
+            # If file is not in our output directory, move it there
+            downloaded_path = Path(downloaded_path)
+            if downloaded_path.parent != output_dir:
+                # Move to our output directory with standard naming
+                filename = f"hrrr.{date.strftime('%Y%m%d')}.t{date.hour:02d}z.f{fxx:02d}.grib2"
+                output_path = output_dir / filename
+                import shutil
+                shutil.move(str(downloaded_path), str(output_path))
+                logger.info(f"Moved to {output_path}")
+            else:
+                output_path = downloaded_path
 
         return output_path
 
