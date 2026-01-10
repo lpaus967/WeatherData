@@ -335,8 +335,9 @@ def download_hrrr_data(
         else:
             # Download full GRIB2 file
             logger.info("Downloading full GRIB2 file")
-            output_path = H.download(output_dir)
+            output_path = H.download(str(output_dir))
             logger.info(f"Downloaded to {output_path}")
+            output_path = Path(output_path)  # Convert back to Path object
 
         return output_path
 
