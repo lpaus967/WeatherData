@@ -335,8 +335,9 @@ def download_hrrr_data(
         else:
             # Download full GRIB2 file
             logger.info("Downloading full GRIB2 file")
-            # Herbie downloads to its cache by default, get the path
-            downloaded_path = H.download(str(output_dir))
+            # Herbie downloads to its cache by default
+            # Don't pass directory - let it use default cache, then we'll move it
+            downloaded_path = H.download()
             logger.info(f"Herbie reported download to: {downloaded_path}")
 
             # Check if file actually exists
