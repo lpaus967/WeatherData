@@ -244,22 +244,37 @@ Example content:
 
 ## Running in Docker
 
+**IMPORTANT:** When using `--variables all` (full GRIB2), you must also mount Herbie's cache directory.
+
 ```bash
-# Basic usage
+# Download with full GRIB2 (recommended - works with current Docker)
 docker run --rm \
   -v ~/.aws:/root/.aws \
   -v /tmp/weather-data:/tmp/weather-data \
+  -v /tmp/herbie-cache:/root/data \
+  -v /path/to/WeatherData:/app \
   weather-processor:latest \
-  python3 /app/scripts/hrrr/download_hrrr.py --latest
+  python3 /app/scripts/hrrr/download_hrrr.py \
+    --latest --variables all
 
 # With custom options
 docker run --rm \
   -v ~/.aws:/root/.aws \
   -v /tmp/weather-data:/tmp/weather-data \
+  -v /tmp/herbie-cache:/root/data \
+  -v /path/to/WeatherData:/app \
   weather-processor:latest \
   python3 /app/scripts/hrrr/download_hrrr.py \
-    --latest --fxx 0-6 --variables default -v
+    --latest --fxx 0-6 --variables all -v
 ```
+
+**Required Docker Mounts:**
+- `-v ~/.aws:/root/.aws` - AWS credentials for S3 upload
+- `-v /tmp/weather-data:/tmp/weather-data` - Output directory
+- `-v /tmp/herbie-cache:/root/data` - Herbie's download cache
+- `-v /path/to/WeatherData:/app` - Your project code
+
+**Note:** Variable-specific downloads (`--variables "TMP:2 m"`) currently crash due to cfgrib segfault. Use `--variables all` for now.
 
 ## Performance
 
