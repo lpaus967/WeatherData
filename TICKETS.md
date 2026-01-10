@@ -2,10 +2,32 @@
 
 This document contains a prioritized list of implementation tickets for building the automated weather data pipeline infrastructure.
 
+## 🎯 Revision: Herbie Integration (2026-01-10)
+
+**Major Update**: The implementation plan has been revised to integrate the [Herbie](https://herbie.readthedocs.io/) Python package for weather data access. This provides significant benefits:
+
+### What Changed
+- **TICKET-003**: Updated Docker container to include Herbie, cfgrib, and eccodes dependencies
+- **TICKET-004**: Replaced manual HRRR download implementation with Herbie-based approach (effort reduced from L to M)
+- **TICKET-005**: Simplified from band identification tool to variable configuration system (effort reduced from S to XS)
+- **TICKET-006**: Updated to use xarray/rioxarray workflow instead of pure GDAL (effort reduced from L to M)
+
+### Why Herbie
+- **Faster Development**: ~3-4 days saved by leveraging battle-tested library
+- **More Robust**: Automatic fallback across multiple data sources (AWS, Google Cloud, NOMADS, Azure)
+- **Better DX**: Simple API replaces complex .idx parsing and byte-range logic
+- **Future-Proof**: Easy to add 15+ other models (GFS, RAP, GEFS, ECMWF) with minimal code changes
+- **Community Support**: Actively maintained by NOAA/weather community
+
+### Impact on Timeline
+- **Original**: ~3-4 weeks for core implementation
+- **With Herbie**: ~2.5-3 weeks for core implementation
+- **Savings**: 3-4 development days
+
 ## Legend
 
 - **Priority**: P0 (Critical), P1 (High), P2 (Medium), P3 (Low)
-- **Effort**: S (Small, <4 hours), M (Medium, 4-8 hours), L (Large, 1-3 days), XL (Extra Large, >3 days)
+- **Effort**: XS (Extra Small, <2 hours), S (Small, <4 hours), M (Medium, 4-8 hours), L (Large, 1-3 days), XL (Extra Large, >3 days)
 - **Status**: 🔴 Not Started | 🟡 In Progress | 🟢 Complete
 
 ---
@@ -13,12 +35,14 @@ This document contains a prioritized list of implementation tickets for building
 ## Phase 1: Infrastructure Setup
 
 ### TICKET-001: Set Up AWS Infrastructure with Terraform
+
 **Priority**: P0 | **Effort**: M | **Status**: 🟡 (Partial - bucket exists)
 
 **Description**:
 Update existing Terraform configuration to support the full weather pipeline infrastructure including S3 buckets with proper organization, IAM roles, and lifecycle policies.
 
 **Tasks**:
+
 - [ ] Update `main.tf` to create organized S3 bucket structure (raw-grib2/, processed-cog/, tiles/, metadata/)
 - [ ] Create S3 lifecycle policies for automated data retention
   - [ ] raw-grib2: Delete after 7 days
@@ -31,6 +55,7 @@ Update existing Terraform configuration to support the full weather pipeline inf
 - [ ] Add versioning for processed-cog bucket (for rollback capability)
 
 **Acceptance Criteria**:
+
 - [ ] `terraform plan` shows correct resource changes
 - [ ] `terraform apply` successfully creates all resources
 - [ ] S3 bucket structure matches specification
@@ -39,6 +64,7 @@ Update existing Terraform configuration to support the full weather pipeline inf
 - [ ] Manual file upload/download works with correct permissions
 
 **Files to Create/Modify**:
+
 - `terraform/main.tf`
 - `terraform/lifecycle-policies.tf` (new)
 - `terraform/iam.tf` (new)
@@ -49,12 +75,14 @@ Update existing Terraform configuration to support the full weather pipeline inf
 ---
 
 ### TICKET-002: Provision EC2 Instance for Data Processing
+
 **Priority**: P0 | **Effort**: S
 
 **Description**:
 Launch and configure an EC2 instance to run the automated pipeline. Use spot instance for cost savings.
 
 **Tasks**:
+
 - [ ] Launch EC2 t3.small spot instance in us-east-1
 - [ ] Configure security group (allow SSH from your IP only)
 - [ ] Attach IAM role from TICKET-001
@@ -70,6 +98,7 @@ Launch and configure an EC2 instance to run the automated pipeline. Use spot ins
 - [ ] Configure spot instance interruption handling
 
 **Acceptance Criteria**:
+
 - [ ] Can SSH into instance
 - [ ] Docker runs without sudo: `docker run hello-world`
 - [ ] AWS CLI configured: `aws s3 ls s3://your-bucket/`
@@ -78,6 +107,7 @@ Launch and configure an EC2 instance to run the automated pipeline. Use spot ins
 - [ ] 50GB EBS volume attached for temporary processing
 
 **Commands**:
+
 ```bash
 # Launch spot instance
 aws ec2 request-spot-instances \
@@ -89,32 +119,39 @@ aws ec2 request-spot-instances \
 
 ---
 
-### TICKET-003: Create Docker Container for GDAL Processing
+### TICKET-003: Create Docker Container for Weather Data Processing
+
 **Priority**: P0 | **Effort**: M
 
 **Description**:
-Build a Docker container with GDAL and all necessary dependencies for processing GRIB2 files.
+Build a Docker container with GDAL, Herbie, and all necessary dependencies for downloading and processing weather forecast data.
 
 **Tasks**:
+
 - [ ] Create `docker/Dockerfile` based on `osgeo/gdal:ubuntu-small-3.8.0`
-- [ ] Install Python dependencies (boto3, requests, numpy)
+- [ ] Install Python dependencies (herbie-data, rioxarray, xarray, boto3, pyyaml)
 - [ ] Create `docker/requirements.txt`
+- [ ] Install cfgrib and eccodes for GRIB2 support (required by Herbie)
 - [ ] Add processing scripts to container
-- [ ] Test GRIB2 processing locally
+- [ ] Test download and processing workflow locally
 - [ ] Build and tag image: `weather-processor:latest`
-- [ ] Test container with sample HRRR file
+- [ ] Test container with sample HRRR download
 - [ ] Document resource requirements (memory, CPU)
-- [ ] Optimize image size (<500MB)
+- [ ] Optimize image size (<800MB with all dependencies)
 
 **Acceptance Criteria**:
+
 - [ ] Docker image builds successfully
-- [ ] Image size < 500MB
-- [ ] Can process GRIB2 file inside container
+- [ ] Image size < 800MB
+- [ ] Can download data with Herbie inside container
+- [ ] Can process NetCDF to COG inside container
 - [ ] Can read from and write to S3 from container
 - [ ] GDAL version 3.6+ installed
-- [ ] All Python dependencies installed
+- [ ] Herbie, cfgrib, and all dependencies working
+- [ ] No permission issues when running container
 
 **Files to Create**:
+
 ```
 docker/
 ├── Dockerfile
@@ -122,191 +159,583 @@ docker/
 └── .dockerignore
 ```
 
-**Dockerfile Example**:
+**requirements.txt**:
+
+```txt
+# Weather data access
+herbie-data>=2024.0.0
+
+# Geospatial processing
+rioxarray>=0.15.0
+xarray>=2023.0.0
+cfgrib>=0.9.10
+eccodes>=1.6.0
+
+# AWS integration
+boto3>=1.28.0
+
+# Configuration
+pyyaml>=6.0
+
+# Utilities
+pandas>=2.0.0
+numpy>=1.24.0
+requests>=2.31.0
+```
+
+**Dockerfile**:
+
 ```dockerfile
 FROM ghcr.io/osgeo/gdal:ubuntu-small-3.8.0
 
+# Install system dependencies for eccodes (required by cfgrib/Herbie)
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
+    libeccodes-dev \
+    libeccodes-tools \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy and install Python requirements
 COPY requirements.txt /tmp/
-RUN pip3 install -r /tmp/requirements.txt
+RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
 
+# Set environment variables for eccodes
+ENV ECCODES_DIR=/usr
+ENV ECCODES_DEFINITION_PATH=/usr/share/eccodes/definitions
+
+# Create working directory
 WORKDIR /app
+
+# Copy scripts (will be mounted or copied during build)
 COPY scripts/ /app/
 
-CMD ["python3", "process_grib.py"]
+# Set Python to unbuffered mode for better logging
+ENV PYTHONUNBUFFERED=1
+
+# Default command
+CMD ["python3", "--version"]
+```
+
+**.dockerignore**:
+
+```
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.Python
+**/env
+**/venv
+**/.env
+**/.venv
+**/.git
+**/.gitignore
+**/.dockerignore
+**/Dockerfile
+**/docker-compose.yml
+**/.pytest_cache
+**/.coverage
+**/htmlcov
+**/*.log
+**/test-data/
+```
+
+**Build and Test Commands**:
+
+```bash
+# Build image
+cd docker/
+docker build -t weather-processor:latest .
+
+# Test Herbie installation
+docker run --rm weather-processor:latest python3 -c "from herbie import Herbie; print('Herbie OK')"
+
+# Test with actual download (requires internet)
+docker run --rm \
+  -v /tmp:/tmp \
+  -e AWS_REGION=us-east-1 \
+  weather-processor:latest \
+  python3 -c "from herbie import Herbie; H = Herbie('2026-01-09 12:00', model='hrrr', fxx=0); print(H)"
 ```
 
 ---
 
 ## Phase 2: Data Ingestion Scripts
 
-### TICKET-004: Create HRRR Download Script with Byte-Range Support
-**Priority**: P0 | **Effort**: L
+### TICKET-004: Create HRRR Download Script with Herbie
+
+**Priority**: P0 | **Effort**: M (reduced from L)
 
 **Description**:
-Build Python script to download HRRR GRIB2 files from NOAA's S3 bucket using efficient byte-range requests to download only needed variables.
+Build Python script using Herbie package to download HRRR forecast data. Herbie simplifies access to weather model data with automatic byte-range downloads, multi-source fallback, and native xarray integration.
 
 **Tasks**:
-- [ ] Create `scripts/download_hrrr.py`
-- [ ] Implement function to calculate model run time (current time - 3 hours)
-- [ ] Implement `.idx` file parsing to find byte ranges
-- [ ] Implement byte-range download for specific variables (temperature band)
-- [ ] Add retry logic with exponential backoff
-- [ ] Download forecast hours F00-F12 (13 files per run)
-- [ ] Save original GRIB2 files to local temporary directory
-- [ ] Upload original GRIB2 to S3 with timestamped paths
+
+- [ ] Create `scripts/download_hrrr.py` using Herbie
+- [ ] Install herbie-data package in Docker container
+- [ ] Download forecast hours F00-F12 for specified variables
+- [ ] Use Herbie's smart download for specific variables (TMP:2 m, UGRD:10 m, VGRD:10 m)
+- [ ] Save downloaded data as NetCDF or retain GRIB2 format
+- [ ] Upload processed data to S3 with timestamped paths
 - [ ] Add logging with timestamps
-- [ ] Handle missing or delayed NOAA data gracefully
-- [ ] Add command-line arguments (--run, --cycle, --forecast-hours)
+- [ ] Handle missing or delayed NOAA data gracefully (Herbie auto-fallback to other sources)
+- [ ] Add command-line arguments (--date, --cycle, --forecast-hours, --variables)
 - [ ] Create unit tests
 
 **Acceptance Criteria**:
+
 - [ ] Can download single forecast hour successfully
 - [ ] Can download all 13 forecast hours (F00-F12)
-- [ ] Byte-range download reduces file size by >80% (only temperature variable)
-- [ ] Files saved with correct naming convention
-- [ ] Original GRIB2 files uploaded to S3 with timestamp
-- [ ] Script handles network errors gracefully
+- [ ] Downloads only requested variables (reduces data transfer by >80%)
+- [ ] Data loaded into xarray Dataset for immediate processing
+- [ ] Script handles network errors gracefully with Herbie's retry logic
 - [ ] Logging shows progress and timing
 - [ ] Script completes in <5 minutes for 13 forecast hours
+- [ ] Automatic fallback to alternate sources if primary source unavailable
 
 **File Structure**:
+
 ```python
 # scripts/download_hrrr.py
 
 import argparse
-import boto3
-import requests
+import logging
 from datetime import datetime, timedelta
+from pathlib import Path
+from herbie import Herbie, FastHerbie
+import xarray as xr
 
-def calculate_model_run(hours_ago=3):
-    """Calculate which model run to download"""
-    pass
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-def parse_idx_file(idx_url, variable_name):
-    """Parse .idx file to find byte ranges for variable"""
-    pass
+def download_forecast(date, fxx_range, variables, output_dir):
+    """
+    Download HRRR forecast data using Herbie
 
-def download_grib_variable(grib_url, byte_range, output_path):
-    """Download specific variable using byte-range request"""
-    pass
+    Args:
+        date: Model run date (datetime or str)
+        fxx_range: Range of forecast hours (e.g., range(0, 13))
+        variables: List of GRIB2 search strings (e.g., ['TMP:2 m', 'UGRD:10 m'])
+        output_dir: Directory to save data
+    """
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
 
-def upload_to_s3(local_path, bucket, s3_key):
-    """Upload GRIB2 file to S3 with timestamp"""
-    pass
+    downloaded_files = []
+
+    for fxx in fxx_range:
+        logger.info(f"Downloading forecast hour F{fxx:02d}...")
+
+        try:
+            # Create Herbie object for this forecast hour
+            H = Herbie(
+                date,
+                model='hrrr',
+                product='sfc',  # surface fields
+                fxx=fxx
+            )
+
+            # Download multiple variables efficiently
+            for var in variables:
+                logger.info(f"  Downloading {var}...")
+
+                # Download and load into xarray
+                ds = H.xarray(var, remove_grib=False)
+
+                # Save to NetCDF for processing
+                var_name = var.split(':')[0].lower()
+                output_file = output_path / f"hrrr_{H.date:%Y%m%d_%H}z_f{fxx:02d}_{var_name}.nc"
+                ds.to_netcdf(output_file)
+
+                downloaded_files.append(output_file)
+                logger.info(f"  Saved to {output_file}")
+
+        except Exception as e:
+            logger.error(f"Error downloading F{fxx:02d}: {e}")
+            continue
+
+    return downloaded_files
+
+def download_batch_forecast(dates, fxx_range, variables, output_dir):
+    """
+    Download multiple forecast runs efficiently using FastHerbie
+
+    Useful for bulk downloads or backfilling data
+    """
+    logger.info(f"Batch downloading {len(dates)} model runs...")
+
+    # FastHerbie enables parallel downloads
+    FH = FastHerbie(
+        dates,
+        model='hrrr',
+        fxx=list(fxx_range)
+    )
+
+    # Download all at once
+    for var in variables:
+        logger.info(f"Downloading {var} for all forecast hours...")
+        FH.xarray(var, max_threads=4)
+
+def upload_to_s3(local_files, bucket, s3_prefix):
+    """Upload files to S3 with timestamp organization"""
+    import boto3
+
+    s3 = boto3.client('s3')
+
+    for file_path in local_files:
+        s3_key = f"{s3_prefix}/{file_path.name}"
+        logger.info(f"Uploading {file_path.name} to s3://{bucket}/{s3_key}")
+        s3.upload_file(str(file_path), bucket, s3_key)
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--cycle', help='Model cycle hour (00-23)')
-    parser.add_argument('--forecast-hours', default='0-12')
+    parser = argparse.ArgumentParser(description='Download HRRR data using Herbie')
+    parser.add_argument('--date', help='Model run date (YYYY-MM-DD HH:MM)',
+                       default=(datetime.utcnow() - timedelta(hours=3)).strftime('%Y-%m-%d %H:00'))
+    parser.add_argument('--forecast-hours', default='0-12', help='Forecast hour range (e.g., 0-12)')
+    parser.add_argument('--variables', nargs='+',
+                       default=['TMP:2 m'],
+                       help='Variables to download (e.g., "TMP:2 m" "UGRD:10 m")')
+    parser.add_argument('--output-dir', default='/tmp/hrrr-data', help='Output directory')
+    parser.add_argument('--s3-bucket', help='S3 bucket for upload (optional)')
+    parser.add_argument('--s3-prefix', default='raw-grib2', help='S3 prefix')
+
     args = parser.parse_args()
 
-    # Implementation
-    pass
+    # Parse forecast hour range
+    start, end = map(int, args.forecast_hours.split('-'))
+    fxx_range = range(start, end + 1)
+
+    logger.info(f"Starting download for {args.date}")
+    logger.info(f"Forecast hours: F{start:02d}-F{end:02d}")
+    logger.info(f"Variables: {args.variables}")
+
+    # Download data
+    downloaded_files = download_forecast(
+        args.date,
+        fxx_range,
+        args.variables,
+        args.output_dir
+    )
+
+    logger.info(f"Downloaded {len(downloaded_files)} files")
+
+    # Upload to S3 if specified
+    if args.s3_bucket:
+        upload_to_s3(downloaded_files, args.s3_bucket, args.s3_prefix)
+
+    logger.info("Download complete!")
 
 if __name__ == '__main__':
     main()
 ```
 
+**Herbie Advantages**:
+- Automatic .idx parsing and byte-range downloads
+- Built-in retry logic and error handling
+- Multi-source fallback (AWS → Google Cloud → NOMADS → Azure)
+- Direct xarray integration (no intermediate GRIB2 files needed)
+- Support for 15+ weather models (easy to add GFS, RAP, etc.)
+- FastHerbie for parallel bulk downloads
+
 ---
 
-### TICKET-005: Implement GRIB2 Band Identification Tool
-**Priority**: P1 | **Effort**: S
+### TICKET-005: Create Variable Configuration System
+
+**Priority**: P1 | **Effort**: XS (reduced from S, simplified scope)
 
 **Description**:
-Create utility script to identify which GRIB2 band contains the temperature data, as band numbers may vary between HRRR versions.
+Create configuration file to manage which weather variables to download and process. With Herbie, variables are referenced by GRIB2 search strings rather than band numbers.
 
 **Tasks**:
-- [ ] Create `scripts/identify_bands.py`
-- [ ] Use `gdalinfo` to list all bands in GRIB2 file
-- [ ] Parse band metadata (description, units, level)
-- [ ] Identify temperature band by searching for "TMP" or "Temperature"
-- [ ] Output band number mapping for common variables
-- [ ] Save band mapping to configuration file
-- [ ] Add validation to ensure band is temperature data
+
+- [ ] Create `config/variables.yaml` configuration file
+- [ ] Define variable mappings with Herbie search strings
+- [ ] Include visualization settings (color ramps, units, display names)
+- [ ] Add metadata for each variable (description, units, typical range)
+- [ ] Create helper script to list available variables from a model
+- [ ] Validate configuration on startup
 
 **Acceptance Criteria**:
-- [ ] Script correctly identifies temperature band in sample GRIB2 file
-- [ ] Works with different HRRR file types (wrfsfcf, wrfprsf)
-- [ ] Outputs JSON configuration with band mappings
-- [ ] Validates band contains expected data type
 
-**Usage**:
-```bash
-python3 scripts/identify_bands.py hrrr.t14z.wrfsfcf06.grib2
-# Output:
-# {
-#   "temperature_2m": 72,
-#   "wind_speed_10m": 45,
-#   "precipitation": 12
-# }
+- [ ] Configuration file is valid YAML
+- [ ] All variables have required fields
+- [ ] Helper script can query available variables from HRRR
+- [ ] Easy to add new variables without code changes
+
+**Configuration Example** (`config/variables.yaml`):
+
+```yaml
+variables:
+  temperature_2m:
+    herbie_search: "TMP:2 m"
+    display_name: "Temperature (2m)"
+    units: "Kelvin"
+    units_display: "°C"
+    conversion: "kelvin_to_celsius"
+    typical_range: [-40, 50]
+    color_ramp: "temperature-jet"
+    description: "Temperature at 2 meters above ground"
+
+  wind_speed_10m:
+    herbie_search: "UGRD:10 m|VGRD:10 m"  # Download both U and V components
+    display_name: "Wind Speed (10m)"
+    units: "m/s"
+    units_display: "mph"
+    conversion: "ms_to_mph"
+    typical_range: [0, 100]
+    color_ramp: "wind-speed"
+    description: "Wind speed at 10 meters above ground"
+
+  precipitation:
+    herbie_search: "APCP"
+    display_name: "Accumulated Precipitation"
+    units: "kg/m^2"
+    units_display: "inches"
+    conversion: "kgm2_to_inches"
+    typical_range: [0, 5]
+    color_ramp: "precipitation"
+    description: "Total accumulated precipitation"
+
+# Helper script to discover variables
+# python scripts/list_variables.py --model hrrr --date "2026-01-09 12:00"
+```
+
+**Helper Script** (`scripts/list_variables.py`):
+
+```python
+#!/usr/bin/env python3
+"""List available variables in a weather model"""
+
+import argparse
+from herbie import Herbie
+
+def list_variables(date, model='hrrr', fxx=0):
+    """List all available variables in a model run"""
+    H = Herbie(date, model=model, fxx=fxx)
+
+    # Get the inventory (list of all variables)
+    inventory = H.inventory()
+
+    print(f"\nAvailable variables in {model.upper()} for {date}, F{fxx:02d}:\n")
+    print(f"{'Variable':<40} {'Level':<20} {'Description':<50}")
+    print("-" * 110)
+
+    for idx, row in inventory.iterrows():
+        print(f"{row['search_this']:<40} {row['level']:<20} {row['param']:<50}")
+
+    return inventory
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--date', default='2026-01-09 12:00')
+    parser.add_argument('--model', default='hrrr')
+    parser.add_argument('--fxx', type=int, default=0)
+    args = parser.parse_args()
+
+    list_variables(args.date, args.model, args.fxx)
 ```
 
 ---
 
 ## Phase 3: GDAL Processing Pipeline
 
-### TICKET-006: Create GDAL Batch Processing Script
-**Priority**: P0 | **Effort**: L
+### TICKET-006: Create Data Processing Script with rioxarray
+
+**Priority**: P0 | **Effort**: M (reduced from L)
 
 **Description**:
-Build Python script to batch process GRIB2 files with GDAL, extracting temperature band, reprojecting to EPSG:3857, and creating Cloud Optimized GeoTIFFs.
+Build Python script to process weather data from xarray Datasets (via Herbie) into Cloud Optimized GeoTIFFs. Uses rioxarray for reprojection and GDAL for COG creation.
 
 **Tasks**:
-- [ ] Create `scripts/process_grib.py`
-- [ ] Implement single-file GDAL processing function:
-  - [ ] Extract specific band (temperature)
-  - [ ] Reproject to EPSG:3857 (Web Mercator)
+
+- [ ] Create `scripts/process_weather.py`
+- [ ] Load NetCDF files from Herbie downloads into xarray
+- [ ] Implement data processing function:
+  - [ ] Reproject to EPSG:3857 (Web Mercator) using rioxarray
+  - [ ] Apply unit conversions (Kelvin to Celsius, etc.)
   - [ ] Apply bilinear resampling
-  - [ ] Create Cloud Optimized GeoTIFF (COG)
+  - [ ] Export to Cloud Optimized GeoTIFF (COG)
   - [ ] Apply DEFLATE compression
   - [ ] Add overviews for multi-scale viewing
 - [ ] Implement parallel processing for multiple forecast hours
-- [ ] Use ProcessPoolExecutor for multi-core utilization
+- [ ] Use ProcessPoolExecutor or dask for multi-core utilization
 - [ ] Add progress tracking and logging
-- [ ] Handle GDAL errors gracefully
+- [ ] Handle processing errors gracefully
 - [ ] Validate output COG files
-- [ ] Add command-line arguments (--input-dir, --output-dir, --band)
-- [ ] Optimize GDAL creation options for web serving
+- [ ] Add command-line arguments (--input-dir, --output-dir, --variable)
+- [ ] Optimize for web serving (tile-aligned blocks)
 
 **Acceptance Criteria**:
-- [ ] Processes single GRIB2 file to COG successfully
-- [ ] Output COG is <5MB (compressed from ~155MB GRIB2)
+
+- [ ] Processes single NetCDF file to COG successfully
+- [ ] Output COG is <5MB with compression
 - [ ] COG is properly georeferenced in EPSG:3857
-- [ ] Can process 13 files in <15 minutes
+- [ ] Can process 13 files in <10 minutes
 - [ ] Utilizes multiple CPU cores efficiently
 - [ ] Output files pass COG validation: `rio cogeo validate output.tif`
 - [ ] Includes overviews for zoom levels 1-10
 
-**GDAL Command Sequence**:
-```bash
-# Single file processing
-gdalwarp \
-  -t_srs EPSG:3857 \
-  -of COG \
-  -b 72 \
-  -co COMPRESS=DEFLATE \
-  -co BLOCKSIZE=256 \
-  -co OVERVIEW_RESAMPLING=BILINEAR \
-  -co NUM_THREADS=ALL_CPUS \
-  -r bilinear \
-  input.grib2 \
-  output.tif
+**Processing Script**:
+
+```python
+# scripts/process_weather.py
+
+import argparse
+import logging
+from pathlib import Path
+from concurrent.futures import ProcessPoolExecutor
+import xarray as xr
+import rioxarray
+from osgeo import gdal
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+def kelvin_to_celsius(da):
+    """Convert temperature from Kelvin to Celsius"""
+    return da - 273.15
+
+def process_to_cog(input_nc, output_tif, target_crs='EPSG:3857', variable=None):
+    """
+    Process NetCDF to Cloud Optimized GeoTIFF
+
+    Args:
+        input_nc: Path to input NetCDF file
+        output_tif: Path to output COG file
+        target_crs: Target coordinate reference system
+        variable: Variable name to extract (if None, uses first data variable)
+    """
+    logger.info(f"Processing {input_nc.name}...")
+
+    try:
+        # Load NetCDF with rioxarray
+        ds = xr.open_dataset(input_nc)
+
+        # Select variable (temperature, wind, etc.)
+        if variable is None:
+            variable = list(ds.data_vars)[0]
+
+        da = ds[variable]
+
+        # Apply unit conversions if needed
+        if 'temperature' in str(variable).lower() or variable == 't2m':
+            logger.info("  Converting Kelvin to Celsius...")
+            da = kelvin_to_celsius(da)
+            da.attrs['units'] = 'Celsius'
+
+        # Set spatial dimensions if not already set
+        if not hasattr(da, 'rio'):
+            # Herbie data usually comes with proper georeferencing
+            da = da.rio.write_crs("EPSG:4326")  # HRRR native is usually lat/lon
+
+        # Reproject to Web Mercator
+        logger.info(f"  Reprojecting to {target_crs}...")
+        da_reproj = da.rio.reproject(
+            target_crs,
+            resampling='bilinear',
+            nodata=-9999
+        )
+
+        # Write to temporary GeoTIFF
+        temp_tif = output_tif.parent / f"{output_tif.stem}_temp.tif"
+        da_reproj.rio.to_raster(
+            temp_tif,
+            driver='GTiff',
+            compress='DEFLATE',
+            tiled=True,
+            blockxsize=256,
+            blockysize=256
+        )
+
+        # Convert to COG with overviews
+        logger.info("  Creating Cloud Optimized GeoTIFF...")
+        gdal.Translate(
+            str(output_tif),
+            str(temp_tif),
+            format='COG',
+            creationOptions=[
+                'COMPRESS=DEFLATE',
+                'BLOCKSIZE=256',
+                'OVERVIEW_RESAMPLING=BILINEAR',
+                'NUM_THREADS=ALL_CPUS',
+                'BIGTIFF=IF_SAFER'
+            ]
+        )
+
+        # Clean up temp file
+        temp_tif.unlink()
+
+        logger.info(f"  Created {output_tif.name} ({output_tif.stat().st_size / 1024 / 1024:.2f} MB)")
+        return output_tif
+
+    except Exception as e:
+        logger.error(f"Error processing {input_nc.name}: {e}")
+        raise
+
+def process_batch(input_dir, output_dir, variable=None, max_workers=4):
+    """Process multiple NetCDF files in parallel"""
+    input_path = Path(input_dir)
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    # Find all NetCDF files
+    nc_files = sorted(input_path.glob('*.nc'))
+    logger.info(f"Found {len(nc_files)} files to process")
+
+    # Process in parallel
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = []
+        for nc_file in nc_files:
+            output_file = output_path / f"{nc_file.stem}.tif"
+            future = executor.submit(process_to_cog, nc_file, output_file, variable=variable)
+            futures.append(future)
+
+        # Wait for completion
+        results = [f.result() for f in futures]
+
+    logger.info(f"Processed {len(results)} files successfully")
+    return results
+
+def main():
+    parser = argparse.ArgumentParser(description='Process weather data to COG format')
+    parser.add_argument('--input-dir', required=True, help='Directory with NetCDF files')
+    parser.add_argument('--output-dir', required=True, help='Output directory for COGs')
+    parser.add_argument('--variable', help='Variable name to extract')
+    parser.add_argument('--workers', type=int, default=4, help='Number of parallel workers')
+    parser.add_argument('--target-crs', default='EPSG:3857', help='Target CRS')
+
+    args = parser.parse_args()
+
+    process_batch(
+        args.input_dir,
+        args.output_dir,
+        variable=args.variable,
+        max_workers=args.workers
+    )
+
+if __name__ == '__main__':
+    main()
 ```
+
+**Advantages of xarray/rioxarray Approach**:
+- Direct integration with Herbie output (no GRIB2 intermediate files)
+- Easier unit conversions and data transformations
+- Native support for NetCDF and COG output
+- Better error handling and metadata preservation
+- Simpler parallel processing with dask if needed
 
 ---
 
 ### TICKET-007: Add Color Ramp and Visualization Styling
+
 **Priority**: P1 | **Effort**: M
 
 **Description**:
 Apply color ramps to temperature data for better visualization in web maps. Convert to 8-bit RGB for smaller file sizes.
 
 **Tasks**:
+
 - [ ] Create color ramp configuration file (JSON)
 - [ ] Define temperature ranges and colors (e.g., -40°C to 50°C)
 - [ ] Implement `gdaldem color-relief` in processing pipeline
@@ -317,6 +746,7 @@ Apply color ramps to temperature data for better visualization in web maps. Conv
 - [ ] Document color ramp customization
 
 **Acceptance Criteria**:
+
 - [ ] Output files have color applied
 - [ ] Temperature ranges map to intuitive colors (blue=cold, red=hot)
 - [ ] File sizes reduced by converting to 8-bit
@@ -324,6 +754,7 @@ Apply color ramps to temperature data for better visualization in web maps. Conv
 - [ ] Can switch between different color schemes
 
 **Color Ramp Example** (`config/color-ramp-temperature.txt`):
+
 ```
 # Temperature color ramp (Kelvin to RGB)
 250 0 0 255      # -23°C = Blue
@@ -340,12 +771,14 @@ Apply color ramps to temperature data for better visualization in web maps. Conv
 ## Phase 4: Tile Generation
 
 ### TICKET-008: Implement Tile Generation Strategy
+
 **Priority**: P1 | **Effort**: M
 
 **Description**:
 Decide on and implement tile generation approach: either pre-generated tiles with gdal2tiles, or dynamic tiles with TiTiler.
 
 **Tasks**:
+
 - [ ] **Option A: Pre-generated Tiles**
   - [ ] Create `scripts/generate_tiles.py` wrapper for gdal2tiles
   - [ ] Generate zoom levels 1-10
@@ -363,6 +796,7 @@ Decide on and implement tile generation approach: either pre-generated tiles wit
 - [ ] Document pros/cons of each approach
 
 **Acceptance Criteria**:
+
 - [ ] Tiles render correctly in Mapbox
 - [ ] Zoom levels 1-10 are available
 - [ ] Tiles load in <500ms
@@ -380,12 +814,14 @@ Decide on and implement tile generation approach: either pre-generated tiles wit
 ---
 
 ### TICKET-009: Optimize Tile Generation Performance
+
 **Priority**: P2 | **Effort**: M
 
 **Description**:
 If using pre-generated tiles, optimize the tile generation process to complete within the hourly processing window.
 
 **Tasks**:
+
 - [ ] Profile tile generation performance
 - [ ] Implement parallel tile generation (use all CPU cores)
 - [ ] Skip generating tiles for zoom levels with no data
@@ -395,6 +831,7 @@ If using pre-generated tiles, optimize the tile generation process to complete w
 - [ ] Batch upload tiles to S3 (not one-by-one)
 
 **Acceptance Criteria**:
+
 - [ ] Tile generation for 13 forecast hours completes in <20 minutes
 - [ ] Utilizes all available CPU cores
 - [ ] S3 upload uses batch operations
@@ -405,12 +842,14 @@ If using pre-generated tiles, optimize the tile generation process to complete w
 ## Phase 5: Automation and Orchestration
 
 ### TICKET-010: Create Master Pipeline Orchestration Script
+
 **Priority**: P0 | **Effort**: M
 
 **Description**:
 Build main bash script that orchestrates the entire pipeline: download, process, tile generation, upload, and metadata update.
 
 **Tasks**:
+
 - [ ] Create `scripts/pipeline.sh`
 - [ ] Calculate model run time (current UTC - 3 hours)
 - [ ] Call download script
@@ -425,6 +864,7 @@ Build main bash script that orchestrates the entire pipeline: download, process,
 - [ ] Add dry-run mode for testing
 
 **Acceptance Criteria**:
+
 - [ ] Pipeline runs end-to-end successfully
 - [ ] Completes in <30 minutes
 - [ ] Handles errors gracefully (retries, alerts)
@@ -434,6 +874,7 @@ Build main bash script that orchestrates the entire pipeline: download, process,
 - [ ] Can run in dry-run mode without side effects
 
 **Script Structure**:
+
 ```bash
 #!/bin/bash
 # scripts/pipeline.sh
@@ -485,12 +926,14 @@ main "$@"
 ---
 
 ### TICKET-011: Configure Cron Job for Hourly Execution
+
 **Priority**: P0 | **Effort**: S
 
 **Description**:
 Set up cron job on EC2 instance to run pipeline hourly at HH:15 (15 minutes past each hour).
 
 **Tasks**:
+
 - [ ] Create cron entry for hourly execution
 - [ ] Configure proper environment variables in cron
 - [ ] Set up log rotation for pipeline logs
@@ -500,6 +943,7 @@ Set up cron job on EC2 instance to run pipeline hourly at HH:15 (15 minutes past
 - [ ] Document cron schedule and timezone (UTC)
 
 **Acceptance Criteria**:
+
 - [ ] Cron job runs at :15 past each hour
 - [ ] Pipeline executes successfully from cron
 - [ ] Logs are written to `/var/log/weather-pipeline.log`
@@ -507,6 +951,7 @@ Set up cron job on EC2 instance to run pipeline hourly at HH:15 (15 minutes past
 - [ ] Failures trigger alerts
 
 **Crontab Configuration**:
+
 ```bash
 # Edit crontab
 crontab -e
@@ -521,6 +966,7 @@ S3_BUCKET=your-weather-bucket
 ```
 
 **Log Rotation** (`/etc/logrotate.d/weather-pipeline`):
+
 ```
 /var/log/weather-pipeline.log {
     daily
@@ -536,12 +982,14 @@ S3_BUCKET=your-weather-bucket
 ---
 
 ### TICKET-012: Create Metadata Generation Script
+
 **Priority**: P1 | **Effort**: S
 
 **Description**:
 Generate `latest.json` metadata file that web app uses to discover the most recent forecast and tile URLs.
 
 **Tasks**:
+
 - [ ] Create `scripts/generate_metadata.py`
 - [ ] Calculate model run timestamp
 - [ ] List available forecast hours
@@ -552,12 +1000,14 @@ Generate `latest.json` metadata file that web app uses to discover the most rece
 - [ ] Validate JSON schema
 
 **Acceptance Criteria**:
+
 - [ ] JSON file is valid and parseable
 - [ ] Contains all required fields
 - [ ] Uploaded to S3 with correct cache headers
 - [ ] Web app can load and parse file
 
 **Metadata Schema** (`metadata/latest.json`):
+
 ```json
 {
   "modelRun": "2026-01-09T14Z",
@@ -584,12 +1034,14 @@ Generate `latest.json` metadata file that web app uses to discover the most rece
 ## Phase 6: Web Application
 
 ### TICKET-013: Create Mapbox Web Application
+
 **Priority**: P1 | **Effort**: L
 
 **Description**:
 Build web application with Mapbox GL JS to display weather tiles on an interactive map.
 
 **Tasks**:
+
 - [ ] Create `web/index.html` with map container
 - [ ] Initialize Mapbox GL JS map
 - [ ] Load latest forecast from `metadata/latest.json`
@@ -604,6 +1056,7 @@ Build web application with Mapbox GL JS to display weather tiles on an interacti
 - [ ] Auto-refresh on new forecast availability
 
 **Acceptance Criteria**:
+
 - [ ] Map loads and displays temperature tiles
 - [ ] Can switch between forecast hours
 - [ ] Animation plays through forecast hours
@@ -613,6 +1066,7 @@ Build web application with Mapbox GL JS to display weather tiles on an interacti
 - [ ] Auto-detects new forecasts every 5 minutes
 
 **Files to Create**:
+
 ```
 web/
 ├── index.html
@@ -624,12 +1078,14 @@ web/
 ---
 
 ### TICKET-014: Implement Forecast Hour Animation
+
 **Priority**: P2 | **Effort**: M
 
 **Description**:
 Add animation feature to cycle through forecast hours automatically, showing temperature evolution over time.
 
 **Tasks**:
+
 - [ ] Create animation controller class
 - [ ] Implement play/pause controls
 - [ ] Add speed control (1x, 2x, 4x)
@@ -640,6 +1096,7 @@ Add animation feature to cycle through forecast hours automatically, showing tem
 - [ ] Loop animation option
 
 **Acceptance Criteria**:
+
 - [ ] Animation plays smoothly through all forecast hours
 - [ ] Can pause at any forecast hour
 - [ ] Timeline slider shows current position
@@ -647,6 +1104,7 @@ Add animation feature to cycle through forecast hours automatically, showing tem
 - [ ] Smooth fade transitions between hours
 
 **UI Controls**:
+
 ```
 [◄◄] [▶/⏸] [►►]  [====●====] F06 - Valid: 2026-01-09 20:00 UTC
 ```
@@ -654,12 +1112,14 @@ Add animation feature to cycle through forecast hours automatically, showing tem
 ---
 
 ### TICKET-015: Deploy Web Application to S3 + CloudFront
+
 **Priority**: P1 | **Effort**: S
 
 **Description**:
 Host the web application on S3 with CloudFront for fast global access.
 
 **Tasks**:
+
 - [ ] Create S3 bucket for static website hosting
 - [ ] Configure bucket for public read access
 - [ ] Upload web application files
@@ -670,6 +1130,7 @@ Host the web application on S3 with CloudFront for fast global access.
 - [ ] Test deployment
 
 **Acceptance Criteria**:
+
 - [ ] Web app accessible via CloudFront URL
 - [ ] HTTPS enabled
 - [ ] Fast load times globally (<2 seconds)
@@ -680,12 +1141,14 @@ Host the web application on S3 with CloudFront for fast global access.
 ## Phase 7: Monitoring and Observability
 
 ### TICKET-016: Set Up CloudWatch Monitoring
+
 **Priority**: P1 | **Effort**: M
 
 **Description**:
 Implement comprehensive monitoring with CloudWatch metrics, logs, and alarms.
 
 **Tasks**:
+
 - [ ] Create custom CloudWatch metrics:
   - [ ] `DataAge`: Minutes since model run
   - [ ] `ProcessingTime`: Total pipeline duration
@@ -699,12 +1162,14 @@ Implement comprehensive monitoring with CloudWatch metrics, logs, and alarms.
 - [ ] Send metrics from Python scripts using boto3
 
 **Acceptance Criteria**:
+
 - [ ] Metrics appear in CloudWatch console
 - [ ] Logs are searchable in CloudWatch Logs
 - [ ] Can create custom dashboards from metrics
 - [ ] Log retention policies active
 
 **Metric Publishing Example**:
+
 ```python
 import boto3
 from datetime import datetime
@@ -726,12 +1191,14 @@ def send_metric(metric_name, value, unit='None'):
 ---
 
 ### TICKET-017: Create CloudWatch Alarms
+
 **Priority**: P1 | **Effort**: S
 
 **Description**:
 Set up alarms to notify when pipeline fails or data becomes stale.
 
 **Tasks**:
+
 - [ ] Create SNS topic for alerts
 - [ ] Subscribe email to SNS topic
 - [ ] Create alarms:
@@ -744,12 +1211,14 @@ Set up alarms to notify when pipeline fails or data becomes stale.
 - [ ] Document alarm response procedures
 
 **Acceptance Criteria**:
+
 - [ ] Alarms trigger on threshold breach
 - [ ] Email notifications received
 - [ ] Alarms visible in CloudWatch console
 - [ ] Can acknowledge and resolve alarms
 
 **Alarm Configuration** (Terraform):
+
 ```hcl
 resource "aws_cloudwatch_metric_alarm" "data_stale" {
   alarm_name          = "weather-data-stale"
@@ -768,12 +1237,14 @@ resource "aws_cloudwatch_metric_alarm" "data_stale" {
 ---
 
 ### TICKET-018: Create CloudWatch Dashboard
+
 **Priority**: P2 | **Effort**: S
 
 **Description**:
 Build operational dashboard showing pipeline health and performance metrics.
 
 **Tasks**:
+
 - [ ] Create CloudWatch dashboard
 - [ ] Add widgets for key metrics:
   - [ ] Data age graph (last 24 hours)
@@ -787,6 +1258,7 @@ Build operational dashboard showing pipeline health and performance metrics.
 - [ ] Export dashboard JSON for version control
 
 **Acceptance Criteria**:
+
 - [ ] Dashboard shows real-time metrics
 - [ ] All widgets display data correctly
 - [ ] Can access dashboard via URL
@@ -797,12 +1269,14 @@ Build operational dashboard showing pipeline health and performance metrics.
 ## Phase 8: Testing and Validation
 
 ### TICKET-019: Create Integration Test Suite
+
 **Priority**: P1 | **Effort**: M
 
 **Description**:
 Build automated tests to validate end-to-end pipeline functionality.
 
 **Tasks**:
+
 - [ ] Create `tests/` directory
 - [ ] Write test for HRRR download:
   - [ ] Mock NOAA S3 responses
@@ -820,12 +1294,14 @@ Build automated tests to validate end-to-end pipeline functionality.
 - [ ] Create CI/CD pipeline (optional)
 
 **Acceptance Criteria**:
+
 - [ ] All tests pass: `pytest tests/`
 - [ ] Test coverage > 70%
 - [ ] Tests run in <5 minutes
 - [ ] Tests can run in isolated environment
 
 **Test Structure**:
+
 ```
 tests/
 ├── __init__.py
@@ -842,12 +1318,14 @@ tests/
 ---
 
 ### TICKET-020: Perform Load Testing on Tile Serving
+
 **Priority**: P2 | **Effort**: M
 
 **Description**:
 Test tile serving performance under realistic traffic loads.
 
 **Tasks**:
+
 - [ ] Set up load testing tool (Apache Bench or Locust)
 - [ ] Create test scenarios:
   - [ ] 100 concurrent users panning map
@@ -860,6 +1338,7 @@ Test tile serving performance under realistic traffic loads.
 - [ ] Document performance characteristics
 
 **Acceptance Criteria**:
+
 - [ ] Tile endpoint handles 1000 req/s
 - [ ] p95 response time < 500ms
 - [ ] CloudFront cache hit rate > 90%
@@ -870,12 +1349,14 @@ Test tile serving performance under realistic traffic loads.
 ## Phase 9: Documentation and Operations
 
 ### TICKET-021: Write Operational Runbook
+
 **Priority**: P1 | **Effort**: S
 
 **Description**:
 Create operational documentation for common tasks and troubleshooting.
 
 **Tasks**:
+
 - [ ] Document common issues and solutions
 - [ ] Create troubleshooting flowcharts
 - [ ] Document alert response procedures
@@ -885,15 +1366,18 @@ Create operational documentation for common tasks and troubleshooting.
 - [ ] Create disaster recovery plan
 
 **Acceptance Criteria**:
+
 - [ ] Runbook covers all common operational tasks
 - [ ] Troubleshooting steps are clear and actionable
 - [ ] New team members can follow runbook successfully
 
 **Sections**:
+
 ```markdown
 # Operational Runbook
 
 ## Table of Contents
+
 1. Architecture Overview
 2. Common Issues and Solutions
 3. Alert Response Procedures
@@ -905,28 +1389,33 @@ Create operational documentation for common tasks and troubleshooting.
 ## Common Issues
 
 ### Issue: Pipeline Not Running
+
 **Symptoms**: No new data in S3, DataAge metric increasing
 **Diagnosis**:
+
 1. Check cron job: `crontab -l`
 2. Check recent logs: `tail -100 /var/log/weather-pipeline.log`
 3. Check EC2 instance status
 
 **Resolution**:
+
 1. If cron not running: `sudo service cron restart`
 2. If disk full: Clean up /tmp directory
 3. If script error: Check logs and fix code
-...
+   ...
 ```
 
 ---
 
 ### TICKET-022: Create Cost Optimization Review
+
 **Priority**: P2 | **Effort**: S
 
 **Description**:
 Analyze actual costs and identify optimization opportunities.
 
 **Tasks**:
+
 - [ ] Enable AWS Cost Explorer
 - [ ] Tag all resources with project name
 - [ ] Review actual costs after 1 week of operation
@@ -940,6 +1429,7 @@ Analyze actual costs and identify optimization opportunities.
 - [ ] Implement approved optimizations
 
 **Acceptance Criteria**:
+
 - [ ] Monthly cost report generated
 - [ ] Cost breakdown by service
 - [ ] At least 3 optimization recommendations
@@ -950,12 +1440,14 @@ Analyze actual costs and identify optimization opportunities.
 ## Phase 10: Future Enhancements
 
 ### TICKET-023: Add Wind Speed and Precipitation Variables
+
 **Priority**: P3 | **Effort**: L
 
 **Description**:
 Expand pipeline to process additional weather variables beyond temperature.
 
 **Tasks**:
+
 - [ ] Identify GRIB2 bands for wind speed and precipitation
 - [ ] Update download script to get additional variables
 - [ ] Create color ramps for each variable
@@ -965,6 +1457,7 @@ Expand pipeline to process additional weather variables beyond temperature.
 - [ ] Update metadata schema
 
 **Acceptance Criteria**:
+
 - [ ] Can display wind speed on map
 - [ ] Can display precipitation on map
 - [ ] Can toggle between variables in web app
@@ -973,12 +1466,14 @@ Expand pipeline to process additional weather variables beyond temperature.
 ---
 
 ### TICKET-024: Implement Historical Weather Archive
+
 **Priority**: P3 | **Effort**: XL
 
 **Description**:
 Archive processed weather data for historical analysis and playback.
 
 **Tasks**:
+
 - [ ] Extend S3 lifecycle policies for archival
 - [ ] Create Glacier storage for long-term retention
 - [ ] Build API to query historical data
@@ -989,12 +1484,14 @@ Archive processed weather data for historical analysis and playback.
 ---
 
 ### TICKET-025: Deploy TiTiler for Dynamic Tile Generation
+
 **Priority**: P3 | **Effort**: L
 
 **Description**:
 Replace pre-generated tiles with TiTiler for dynamic, on-demand tile generation with runtime styling.
 
 **Tasks**:
+
 - [ ] Deploy TiTiler on ECS Fargate
 - [ ] Configure Application Load Balancer
 - [ ] Set up auto-scaling
@@ -1008,22 +1505,48 @@ Replace pre-generated tiles with TiTiler for dynamic, on-demand tile generation 
 ## Summary
 
 ### Quick Stats
+
 - **Total Tickets**: 25
 - **P0 (Critical)**: 7 tickets
 - **P1 (High)**: 10 tickets
 - **P2 (Medium)**: 5 tickets
 - **P3 (Low)**: 3 tickets
 
-### Estimated Timeline
-- **Phase 1-2** (Infrastructure + Ingestion): 1 week
-- **Phase 3-4** (Processing + Tiles): 1 week
+### Herbie Integration Benefits
+
+**Effort Reduction**:
+- **TICKET-004**: Reduced from L (1-3 days) to M (4-8 hours) - 50% time savings
+- **TICKET-005**: Reduced from S to XS - simplified to configuration only
+- **TICKET-006**: Reduced from L (1-3 days) to M (4-8 hours) - cleaner xarray integration
+- **Total Saved**: ~3-4 days of development time
+
+**Technical Improvements**:
+- ✅ Automatic byte-range downloads (no manual .idx parsing)
+- ✅ Built-in retry logic and error handling
+- ✅ Multi-source fallback (AWS → Google Cloud → NOMADS → Azure)
+- ✅ Direct xarray integration (no intermediate GRIB2 files)
+- ✅ Support for 15+ weather models (GFS, RAP, GEFS, ECMWF, etc.)
+- ✅ FastHerbie for parallel bulk downloads
+- ✅ Simplified variable selection (GRIB2 search strings vs band numbers)
+
+**Future Scalability**:
+- Easy to add new weather models (1-line change)
+- Simple to add new variables (configuration-based)
+- Built-in support for historical data archive
+- Community-maintained package with regular updates
+
+### Estimated Timeline (Updated with Herbie)
+
+- **Phase 1-2** (Infrastructure + Ingestion): 4 days (reduced from 1 week)
+- **Phase 3-4** (Processing + Tiles): 5 days (reduced from 1 week)
 - **Phase 5-6** (Automation + Web): 1 week
 - **Phase 7-9** (Monitoring + Docs): 3 days
 - **Phase 10** (Future Enhancements): Ongoing
 
-**Total Core Implementation**: ~3-4 weeks for one developer
+**Total Core Implementation**: ~2.5-3 weeks for one developer (reduced from 3-4 weeks)
 
 ### Dependencies Graph
+
 ```
 TICKET-001 (Terraform)
     ↓
@@ -1053,6 +1576,7 @@ TICKET-023, 024, 025 (Future Enhancements)
 ```
 
 ### Getting Started
+
 1. Start with TICKET-001 to deploy infrastructure
 2. Follow tickets in numerical order for optimal dependency resolution
 3. Mark tickets complete when all acceptance criteria met
