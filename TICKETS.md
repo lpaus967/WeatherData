@@ -36,7 +36,7 @@ This document contains a prioritized list of implementation tickets for building
 
 ### TICKET-001: Set Up AWS Infrastructure with Terraform
 
-**Priority**: P0 | **Effort**: M | **Status**: 🟡 (Partial - bucket exists)
+**Priority**: P0 | **Effort**: M | **Status**: 🟢 Complete (S3 configured, IAM manual)
 
 **Description**:
 Update existing Terraform configuration to support the full weather pipeline infrastructure including S3 buckets with proper organization, IAM roles, and lifecycle policies.
@@ -76,7 +76,7 @@ Update existing Terraform configuration to support the full weather pipeline inf
 
 ### TICKET-002: Provision EC2 Instance for Data Processing
 
-**Priority**: P0 | **Effort**: S
+**Priority**: P0 | **Effort**: S | **Status**: 🟢 Complete
 
 **Description**:
 Launch and configure an EC2 instance to run the automated pipeline. Use spot instance for cost savings.
@@ -121,7 +121,7 @@ aws ec2 request-spot-instances \
 
 ### TICKET-003: Create Docker Container for Weather Data Processing
 
-**Priority**: P0 | **Effort**: M
+**Priority**: P0 | **Effort**: M | **Status**: 🟢 Complete
 
 **Description**:
 Build a Docker container with GDAL, Herbie, and all necessary dependencies for downloading and processing weather forecast data.
