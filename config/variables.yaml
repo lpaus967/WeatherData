@@ -30,7 +30,7 @@ variables:
     description: "Air temperature at 2 meters above ground"
     units_source: "K"
     units_display: "°C"
-    conversion: "kelvin_to_celsius"  # K - 273.15
+    conversion: "kelvin_to_celsius" # K - 273.15
     typical_range: [-40, 50]
     color_ramp: "temperature"
     priority: 1
@@ -46,7 +46,7 @@ variables:
     typical_range: [-40, 50]
     color_ramp: "temperature"
     priority: 3
-    enabled: false  # Usually use 2m temp instead
+    enabled: false # Usually use 2m temp instead
 
   dewpoint_2m:
     grib_search: "DPT:2 m"
@@ -73,7 +73,7 @@ variables:
     conversion: null
     typical_range: [-50, 50]
     color_ramp: "wind_component"
-    priority: 1
+    priority: 2
     enabled: true
 
   wind_v_10m:
@@ -85,7 +85,7 @@ variables:
     conversion: null
     typical_range: [-50, 50]
     color_ramp: "wind_component"
-    priority: 1
+    priority: 2
     enabled: true
 
   wind_gust_surface:
@@ -94,10 +94,10 @@ variables:
     description: "Surface wind gust"
     units_source: "m/s"
     units_display: "mph"
-    conversion: "ms_to_mph"  # m/s * 2.23694
+    conversion: "ms_to_mph" # m/s * 2.23694
     typical_range: [0, 100]
     color_ramp: "wind_speed"
-    priority: 2
+    priority: 1
     enabled: true
 
   # ==========================================
@@ -126,7 +126,7 @@ variables:
     description: "Total accumulated precipitation"
     units_source: "kg/m^2"
     units_display: "in"
-    conversion: "kgm2_to_inches"  # kg/m^2 * 0.0393701
+    conversion: "kgm2_to_inches" # kg/m^2 * 0.0393701
     typical_range: [0, 10]
     color_ramp: "precipitation"
     priority: 1
@@ -157,7 +157,7 @@ variables:
     conversion: null
     typical_range: [0, 100]
     color_ramp: "cloud_cover"
-    priority: 2
+    priority: 1
     enabled: true
 
   cloud_cover_low:
@@ -258,10 +258,10 @@ variables:
     description: "Horizontal visibility"
     units_source: "m"
     units_display: "mi"
-    conversion: "meters_to_miles"  # m * 0.000621371
+    conversion: "meters_to_miles" # m * 0.000621371
     typical_range: [0, 20]
     color_ramp: "visibility"
-    priority: 3
+    priority: 1
     enabled: false
 
   snow_depth:
@@ -270,10 +270,10 @@ variables:
     description: "Snow depth on ground"
     units_source: "m"
     units_display: "in"
-    conversion: "meters_to_inches"  # m * 39.3701
+    conversion: "meters_to_inches" # m * 39.3701
     typical_range: [0, 100]
     color_ramp: "snow_depth"
-    priority: 3
+    priority: 1
     enabled: false
 
   snow_cover:
@@ -285,7 +285,7 @@ variables:
     conversion: null
     typical_range: [0, 100]
     color_ramp: "snow_cover"
-    priority: 3
+    priority: 1
     enabled: false
 
 # ==========================================
@@ -297,261 +297,261 @@ color_ramps:
     type: "gradient"
     colors:
       - value: -40
-        color: "#1a0066"  # Deep purple (extreme cold)
+        color: "#1a0066" # Deep purple (extreme cold)
       - value: -30
-        color: "#4d0099"  # Purple
+        color: "#4d0099" # Purple
       - value: -20
-        color: "#0000ff"  # Blue
+        color: "#0000ff" # Blue
       - value: -10
-        color: "#00ccff"  # Cyan
+        color: "#00ccff" # Cyan
       - value: 0
-        color: "#00ff00"  # Green (freezing)
+        color: "#00ff00" # Green (freezing)
       - value: 10
-        color: "#99ff00"  # Yellow-green
+        color: "#99ff00" # Yellow-green
       - value: 20
-        color: "#ffff00"  # Yellow (room temp)
+        color: "#ffff00" # Yellow (room temp)
       - value: 30
-        color: "#ffcc00"  # Orange
+        color: "#ffcc00" # Orange
       - value: 40
-        color: "#ff6600"  # Dark orange (hot)
+        color: "#ff6600" # Dark orange (hot)
       - value: 50
-        color: "#ff0000"  # Red (extreme heat)
+        color: "#ff0000" # Red (extreme heat)
 
   dewpoint:
     type: "gradient"
     colors:
       - value: -40
-        color: "#8B4513"  # Saddle brown (very dry)
+        color: "#8B4513" # Saddle brown (very dry)
       - value: -20
-        color: "#D2691E"  # Chocolate
+        color: "#D2691E" # Chocolate
       - value: 0
-        color: "#FFD700"  # Gold
+        color: "#FFD700" # Gold
       - value: 10
-        color: "#90EE90"  # Light green
+        color: "#90EE90" # Light green
       - value: 20
-        color: "#00CED1"  # Dark turquoise (humid)
+        color: "#00CED1" # Dark turquoise (humid)
       - value: 30
-        color: "#0000CD"  # Medium blue (very humid)
+        color: "#0000CD" # Medium blue (very humid)
       - value: 40
-        color: "#4B0082"  # Indigo (oppressive)
+        color: "#4B0082" # Indigo (oppressive)
 
   wind_speed:
     type: "gradient"
     colors:
       - value: 0
-        color: "#FFFFFF"  # White (calm)
+        color: "#FFFFFF" # White (calm)
       - value: 5
-        color: "#E0FFFF"  # Light cyan
+        color: "#E0FFFF" # Light cyan
       - value: 10
-        color: "#87CEEB"  # Sky blue
+        color: "#87CEEB" # Sky blue
       - value: 20
-        color: "#4169E1"  # Royal blue
+        color: "#4169E1" # Royal blue
       - value: 30
-        color: "#FF8C00"  # Dark orange
+        color: "#FF8C00" # Dark orange
       - value: 50
-        color: "#FF0000"  # Red (strong winds)
+        color: "#FF0000" # Red (strong winds)
       - value: 75
-        color: "#8B0000"  # Dark red (damaging)
+        color: "#8B0000" # Dark red (damaging)
       - value: 100
-        color: "#800080"  # Purple (extreme)
+        color: "#800080" # Purple (extreme)
 
   wind_component:
     type: "diverging"
     colors:
       - value: -50
-        color: "#0000FF"  # Blue (westward/southward)
+        color: "#0000FF" # Blue (westward/southward)
       - value: -25
-        color: "#87CEEB"  # Light blue
+        color: "#87CEEB" # Light blue
       - value: 0
-        color: "#FFFFFF"  # White (calm)
+        color: "#FFFFFF" # White (calm)
       - value: 25
-        color: "#FFA500"  # Orange
+        color: "#FFA500" # Orange
       - value: 50
-        color: "#FF0000"  # Red (eastward/northward)
+        color: "#FF0000" # Red (eastward/northward)
 
   humidity:
     type: "gradient"
     colors:
       - value: 0
-        color: "#8B4513"  # Saddle brown (dry)
+        color: "#8B4513" # Saddle brown (dry)
       - value: 20
-        color: "#FFD700"  # Gold
+        color: "#FFD700" # Gold
       - value: 40
-        color: "#ADFF2F"  # Green yellow
+        color: "#ADFF2F" # Green yellow
       - value: 60
-        color: "#00CED1"  # Dark turquoise
+        color: "#00CED1" # Dark turquoise
       - value: 80
-        color: "#0000CD"  # Medium blue
+        color: "#0000CD" # Medium blue
       - value: 100
-        color: "#00008B"  # Dark blue (saturated)
+        color: "#00008B" # Dark blue (saturated)
 
   precipitation:
     type: "gradient"
     colors:
       - value: 0
-        color: "#FFFFFF"  # White (none)
+        color: "#FFFFFF" # White (none)
       - value: 0.01
-        color: "#E0FFFF"  # Light cyan (trace)
+        color: "#E0FFFF" # Light cyan (trace)
       - value: 0.1
-        color: "#87CEEB"  # Sky blue (light)
+        color: "#87CEEB" # Sky blue (light)
       - value: 0.5
-        color: "#4169E1"  # Royal blue (moderate)
+        color: "#4169E1" # Royal blue (moderate)
       - value: 1.0
-        color: "#0000CD"  # Medium blue (heavy)
+        color: "#0000CD" # Medium blue (heavy)
       - value: 2.0
-        color: "#FF00FF"  # Magenta (very heavy)
+        color: "#FF00FF" # Magenta (very heavy)
       - value: 5.0
-        color: "#8B008B"  # Dark magenta (extreme)
+        color: "#8B008B" # Dark magenta (extreme)
       - value: 10.0
-        color: "#4B0082"  # Indigo (historic)
+        color: "#4B0082" # Indigo (historic)
 
   precipitation_rate:
     type: "gradient"
     colors:
       - value: 0
-        color: "#FFFFFF"  # White
+        color: "#FFFFFF" # White
       - value: 0.1
-        color: "#87CEEB"  # Sky blue
+        color: "#87CEEB" # Sky blue
       - value: 0.5
-        color: "#4169E1"  # Royal blue
+        color: "#4169E1" # Royal blue
       - value: 1.0
-        color: "#FF00FF"  # Magenta
+        color: "#FF00FF" # Magenta
       - value: 2.5
-        color: "#8B008B"  # Dark magenta
+        color: "#8B008B" # Dark magenta
       - value: 5.0
-        color: "#4B0082"  # Indigo
+        color: "#4B0082" # Indigo
 
   cloud_cover:
     type: "gradient"
     colors:
       - value: 0
-        color: "#87CEEB"  # Sky blue (clear)
+        color: "#87CEEB" # Sky blue (clear)
       - value: 25
-        color: "#B0C4DE"  # Light steel blue
+        color: "#B0C4DE" # Light steel blue
       - value: 50
-        color: "#778899"  # Light slate gray
+        color: "#778899" # Light slate gray
       - value: 75
-        color: "#696969"  # Dim gray
+        color: "#696969" # Dim gray
       - value: 100
-        color: "#2F4F4F"  # Dark slate gray (overcast)
+        color: "#2F4F4F" # Dark slate gray (overcast)
 
   reflectivity:
     type: "gradient"
     colors:
       - value: -20
-        color: "#FFFFFF"  # White (no echo)
+        color: "#FFFFFF" # White (no echo)
       - value: 0
-        color: "#00FFFF"  # Cyan (weak)
+        color: "#00FFFF" # Cyan (weak)
       - value: 20
-        color: "#0000FF"  # Blue (light rain)
+        color: "#0000FF" # Blue (light rain)
       - value: 30
-        color: "#00FF00"  # Green (moderate rain)
+        color: "#00FF00" # Green (moderate rain)
       - value: 40
-        color: "#FFFF00"  # Yellow (heavy rain)
+        color: "#FFFF00" # Yellow (heavy rain)
       - value: 50
-        color: "#FF0000"  # Red (very heavy)
+        color: "#FF0000" # Red (very heavy)
       - value: 60
-        color: "#FF00FF"  # Magenta (severe)
+        color: "#FF00FF" # Magenta (severe)
       - value: 70
-        color: "#FFFFFF"  # White (hail likely)
+        color: "#FFFFFF" # White (hail likely)
       - value: 80
-        color: "#FFB6C1"  # Light pink (extreme)
+        color: "#FFB6C1" # Light pink (extreme)
 
   cape:
     type: "gradient"
     colors:
       - value: 0
-        color: "#FFFFFF"  # White (stable)
+        color: "#FFFFFF" # White (stable)
       - value: 500
-        color: "#FFFF99"  # Light yellow
+        color: "#FFFF99" # Light yellow
       - value: 1000
-        color: "#FFFF00"  # Yellow (weak instability)
+        color: "#FFFF00" # Yellow (weak instability)
       - value: 1500
-        color: "#FFA500"  # Orange (moderate)
+        color: "#FFA500" # Orange (moderate)
       - value: 2500
-        color: "#FF4500"  # Orange red (strong)
+        color: "#FF4500" # Orange red (strong)
       - value: 4000
-        color: "#FF0000"  # Red (extreme)
+        color: "#FF0000" # Red (extreme)
       - value: 5000
-        color: "#8B0000"  # Dark red (violent)
+        color: "#8B0000" # Dark red (violent)
 
   cin:
     type: "gradient"
     colors:
       - value: -500
-        color: "#8B0000"  # Dark red (strong cap)
+        color: "#8B0000" # Dark red (strong cap)
       - value: -200
-        color: "#FF4500"  # Orange red
+        color: "#FF4500" # Orange red
       - value: -100
-        color: "#FFA500"  # Orange
+        color: "#FFA500" # Orange
       - value: -50
-        color: "#FFFF00"  # Yellow (weak cap)
+        color: "#FFFF00" # Yellow (weak cap)
       - value: 0
-        color: "#FFFFFF"  # White (no cap)
+        color: "#FFFFFF" # White (no cap)
 
   helicity:
     type: "gradient"
     colors:
       - value: 0
-        color: "#FFFFFF"  # White (no rotation)
+        color: "#FFFFFF" # White (no rotation)
       - value: 100
-        color: "#FFFF00"  # Yellow
+        color: "#FFFF00" # Yellow
       - value: 200
-        color: "#FFA500"  # Orange (moderate rotation)
+        color: "#FFA500" # Orange (moderate rotation)
       - value: 300
-        color: "#FF4500"  # Orange red
+        color: "#FF4500" # Orange red
       - value: 400
-        color: "#FF0000"  # Red (strong rotation)
+        color: "#FF0000" # Red (strong rotation)
       - value: 600
-        color: "#8B0000"  # Dark red (violent rotation)
+        color: "#8B0000" # Dark red (violent rotation)
 
   visibility:
     type: "gradient"
     colors:
       - value: 0
-        color: "#4B0082"  # Indigo (zero viz)
+        color: "#4B0082" # Indigo (zero viz)
       - value: 1
-        color: "#8B008B"  # Dark magenta (fog)
+        color: "#8B008B" # Dark magenta (fog)
       - value: 3
-        color: "#FF00FF"  # Magenta (poor)
+        color: "#FF00FF" # Magenta (poor)
       - value: 6
-        color: "#FFD700"  # Gold (marginal)
+        color: "#FFD700" # Gold (marginal)
       - value: 10
-        color: "#90EE90"  # Light green (good)
+        color: "#90EE90" # Light green (good)
       - value: 20
-        color: "#00FF00"  # Green (excellent)
+        color: "#00FF00" # Green (excellent)
 
   snow_depth:
     type: "gradient"
     colors:
       - value: 0
-        color: "#8B4513"  # Saddle brown (bare ground)
+        color: "#8B4513" # Saddle brown (bare ground)
       - value: 1
-        color: "#E6E6FA"  # Lavender (dusting)
+        color: "#E6E6FA" # Lavender (dusting)
       - value: 6
-        color: "#B0E0E6"  # Powder blue (light)
+        color: "#B0E0E6" # Powder blue (light)
       - value: 12
-        color: "#87CEEB"  # Sky blue (moderate)
+        color: "#87CEEB" # Sky blue (moderate)
       - value: 24
-        color: "#4169E1"  # Royal blue (heavy)
+        color: "#4169E1" # Royal blue (heavy)
       - value: 50
-        color: "#0000CD"  # Medium blue (deep)
+        color: "#0000CD" # Medium blue (deep)
       - value: 100
-        color: "#00008B"  # Dark blue (extreme)
+        color: "#00008B" # Dark blue (extreme)
 
   snow_cover:
     type: "gradient"
     colors:
       - value: 0
-        color: "#8B4513"  # Saddle brown (no snow)
+        color: "#8B4513" # Saddle brown (no snow)
       - value: 25
-        color: "#D3D3D3"  # Light gray (patchy)
+        color: "#D3D3D3" # Light gray (patchy)
       - value: 50
-        color: "#C0C0C0"  # Silver
+        color: "#C0C0C0" # Silver
       - value: 75
-        color: "#F0F8FF"  # Alice blue
+        color: "#F0F8FF" # Alice blue
       - value: 100
-        color: "#FFFFFF"  # White (complete coverage)
+        color: "#FFFFFF" # White (complete coverage)
 
 # ==========================================
 # Unit Conversion Formulas
@@ -610,10 +610,10 @@ processing:
   process_by_priority: true
 
   # Output format
-  output_format: "COG"  # Cloud Optimized GeoTIFF
+  output_format: "COG" # Cloud Optimized GeoTIFF
 
   # Projection
-  target_projection: "EPSG:3857"  # Web Mercator for web maps
+  target_projection: "EPSG:3857" # Web Mercator for web maps
 
   # Resampling method
   resampling_method: "bilinear"
