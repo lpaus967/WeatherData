@@ -75,17 +75,18 @@ cleanup() {
 
     if [[ "$DRY_RUN" == "false" ]]; then
         # Clean up work directory (keep logs)
+        # Use sudo if needed because Docker creates files as root
         if [[ -d "$WORK_DIR/downloads" ]]; then
-            rm -rf "$WORK_DIR/downloads"
+            rm -rf "$WORK_DIR/downloads" 2>/dev/null || sudo rm -rf "$WORK_DIR/downloads"
         fi
         if [[ -d "$WORK_DIR/processed" ]]; then
-            rm -rf "$WORK_DIR/processed"
+            rm -rf "$WORK_DIR/processed" 2>/dev/null || sudo rm -rf "$WORK_DIR/processed"
         fi
         if [[ -d "$WORK_DIR/colored" ]]; then
-            rm -rf "$WORK_DIR/colored"
+            rm -rf "$WORK_DIR/colored" 2>/dev/null || sudo rm -rf "$WORK_DIR/colored"
         fi
         if [[ -d "$WORK_DIR/tiles" ]]; then
-            rm -rf "$WORK_DIR/tiles"
+            rm -rf "$WORK_DIR/tiles" 2>/dev/null || sudo rm -rf "$WORK_DIR/tiles"
         fi
     fi
 
@@ -167,6 +168,7 @@ download_data() {
     fi
 
     local cmd="docker run --rm \
+        --user $(id -u):$(id -g) \
         -v $download_dir:/data/output \
         -v $PROJECT_ROOT:/app \
         weather-processor:latest \
@@ -215,6 +217,7 @@ process_grib2() {
     fi
 
     local cmd="docker run --rm \
+        --user $(id -u):$(id -g) \
         -v $WORK_DIR/downloads:/data/input \
         -v $processed_dir:/data/output \
         -v $PROJECT_ROOT:/app \
@@ -254,6 +257,7 @@ apply_colormaps() {
     fi
 
     local cmd="docker run --rm \
+        --user $(id -u):$(id -g) \
         -v $PROCESSED_DIR:/data/input \
         -v $colored_dir:/data/output \
         -v $PROJECT_ROOT:/app \
@@ -296,6 +300,7 @@ generate_tiles() {
     fi
 
     local cmd="docker run --rm \
+        --user $(id -u):$(id -g) \
         -v $COLORED_DIR:/data/input \
         -v $tiles_dir:/data/output \
         -v $PROJECT_ROOT:/app \
