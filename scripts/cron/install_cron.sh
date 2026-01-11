@@ -70,9 +70,10 @@ echo "Installing cron job for user: $INSTALL_USER"
 
 # Create a temporary file with the new cron entry
 TEMP_CRON=$(mktemp)
+chmod 644 "$TEMP_CRON"
 
 # Get existing crontab (if any)
-sudo -u "$INSTALL_USER" crontab -l 2>/dev/null | grep -v "weather-pipeline\|run_pipeline" > "$TEMP_CRON" || true
+crontab -u "$INSTALL_USER" -l 2>/dev/null | grep -v "weather-pipeline\|run_pipeline" > "$TEMP_CRON" || true
 
 # Add our cron entry
 cat >> "$TEMP_CRON" << EOF
@@ -83,7 +84,7 @@ cat >> "$TEMP_CRON" << EOF
 EOF
 
 # Install the new crontab
-sudo -u "$INSTALL_USER" crontab "$TEMP_CRON"
+crontab -u "$INSTALL_USER" "$TEMP_CRON"
 rm -f "$TEMP_CRON"
 
 echo "  Cron job installed"
@@ -97,7 +98,7 @@ echo ""
 echo "Cron schedule: Every hour at :15 (UTC)"
 echo ""
 echo "Current crontab for $INSTALL_USER:"
-sudo -u "$INSTALL_USER" crontab -l | grep -A1 "Weather Data Pipeline" || echo "  (none found)"
+crontab -u "$INSTALL_USER" -l 2>/dev/null | grep -A1 "Weather Data Pipeline" || echo "  (none found)"
 echo ""
 echo "Next steps:"
 echo "  1. Edit environment variables if needed:"
