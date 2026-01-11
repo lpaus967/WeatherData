@@ -169,6 +169,8 @@ download_data() {
 
     local cmd="docker run --rm \
         --user $(id -u):$(id -g) \
+        -e HOME=/tmp \
+        -e HERBIE_HOME=/data/output \
         -v $download_dir:/data/output \
         -v $PROJECT_ROOT:/app \
         weather-processor:latest \
@@ -218,6 +220,7 @@ process_grib2() {
 
     local cmd="docker run --rm \
         --user $(id -u):$(id -g) \
+        -e HOME=/tmp \
         -v $WORK_DIR/downloads:/data/input \
         -v $processed_dir:/data/output \
         -v $PROJECT_ROOT:/app \
@@ -258,6 +261,7 @@ apply_colormaps() {
 
     local cmd="docker run --rm \
         --user $(id -u):$(id -g) \
+        -e HOME=/tmp \
         -v $PROCESSED_DIR:/data/input \
         -v $colored_dir:/data/output \
         -v $PROJECT_ROOT:/app \
@@ -301,6 +305,7 @@ generate_tiles() {
 
     local cmd="docker run --rm \
         --user $(id -u):$(id -g) \
+        -e HOME=/tmp \
         -v $COLORED_DIR:/data/input \
         -v $tiles_dir:/data/output \
         -v $PROJECT_ROOT:/app \
