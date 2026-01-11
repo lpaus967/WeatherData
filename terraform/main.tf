@@ -35,14 +35,34 @@ resource "aws_s3_bucket" "weather_data" {
   }
 }
 
-# Block public access
+# Allow public access for serving tiles
 resource "aws_s3_bucket_public_access_block" "weather_data_pab" {
   bucket = aws_s3_bucket.weather_data.id
 
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
+  block_public_acls       = false
+  block_public_policy     = false
+  ignore_public_acls      = false
+  restrict_public_buckets = false
+}
+
+# Bucket policy for public read access to tiles
+resource "aws_s3_bucket_policy" "weather_data_policy" {
+  bucket = aws_s3_bucket.weather_data.id
+
+  depends_on = [aws_s3_bucket_public_access_block.weather_data_pab]
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "PublicReadGetObject"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.weather_data.arn}/*"
+      }
+    ]
+  })
 }
 
 # Enable versioning
