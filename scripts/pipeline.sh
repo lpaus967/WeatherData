@@ -137,13 +137,13 @@ calculate_model_run_time() {
     local three_hours_ago=$((current_epoch - 10800))  # 3 hours = 10800 seconds
 
     # Use -r for BSD date (macOS) or -d for GNU date (Linux)
-    if date -r "$three_hours_ago" +%Y%m%d &> /dev/null; then
+    if date -r "$three_hours_ago" +%Y-%m-%d &> /dev/null; then
         # BSD date (macOS)
-        MODEL_DATE=$(date -u -r "$three_hours_ago" +%Y%m%d)
+        MODEL_DATE=$(date -u -r "$three_hours_ago" +%Y-%m-%d)
         MODEL_CYCLE=$(date -u -r "$three_hours_ago" +%H)
     else
         # GNU date (Linux)
-        MODEL_DATE=$(date -u -d "@$three_hours_ago" +%Y%m%d)
+        MODEL_DATE=$(date -u -d "@$three_hours_ago" +%Y-%m-%d)
         MODEL_CYCLE=$(date -u -d "@$three_hours_ago" +%H)
     fi
 
