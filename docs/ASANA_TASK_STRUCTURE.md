@@ -3,7 +3,7 @@
 ## Parent Task
 
 **Weather Data Pipeline - Automated Infrastructure**
-_Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **11/25 tickets complete (44%)**_
+_Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **12/25 tickets complete (48%)**_
 
 ---
 
@@ -251,17 +251,22 @@ _Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **11/25 tickets c
 
 ### TICKET-012: Create Metadata Generation Script
 
-- **Priority**: P1 | **Effort**: S (<4 hours) | **Status**: 🔴 Not Started
+- **Priority**: P1 | **Effort**: S (<4 hours) | **Status**: 🟢 Complete
 - **Sub-tasks**:
-  - [ ] Create `scripts/generate_metadata.py`
-  - [ ] Calculate model run timestamp
-  - [ ] List available forecast hours
-  - [ ] Generate tile URL template
-  - [ ] Include forecast validity times
-  - [ ] Add data age/freshness indicator
-  - [ ] Upload to S3 with cache-control headers
-  - [ ] Validate JSON schema
-- **Acceptance**: JSON file is valid and parseable, contains all required fields, uploaded to S3 with correct headers
+  - [x] Create `scripts/generate_metadata.py` (354 lines)
+  - [x] Calculate model run timestamp (parse YYYYMMDD or YYYY-MM-DD formats)
+  - [x] List available forecast hours (scan tiles directory)
+  - [x] Generate tile URL template with placeholders ({variable}, {timestamp}, {forecast}, {z}/{x}/{y})
+  - [x] Include forecast validity times (ISO 8601 timestamps)
+  - [x] Add data age/freshness indicator (fresh/stale/old status)
+  - [x] Upload to S3 with cache-control headers (via pipeline.sh)
+  - [x] Validate JSON schema (TypeScript types created)
+  - [x] Created TypeScript hook `useWeatherMetadata.ts` for web app consumption
+  - [x] Integrated into `scripts/pipeline.sh` generate_metadata() function
+  - [x] Added variable metadata from config/variables.yaml (color ramps, units, display names)
+- **Acceptance**: ✅ JSON file is valid and parseable, contains all required fields (model_run, variables, tiles, data_freshness), TypeScript types match schema
+- **Completion Date**: 2026-01-11
+- **Documentation**: See `scripts/generate_metadata.py` header and TypeScript types in webmaps repo
 
 ---
 
@@ -501,10 +506,10 @@ _Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **11/25 tickets c
 **Parent Task**: Weather Data Pipeline - Automated Infrastructure
 
 - **Total Sub-tasks**: 25 tickets organized into 10 phases
-- **Completed**: 11/25 tickets (44%) ✅
+- **Completed**: 12/25 tickets (48%) ✅
 - **Priority Breakdown**:
   - P0 (Critical): 7 tickets (7 complete, 0 remaining) ✅
-  - P1 (High): 10 tickets (3 complete, 7 remaining)
+  - P1 (High): 10 tickets (4 complete, 6 remaining)
   - P2 (Medium): 5 tickets (1 complete, 4 remaining)
   - P3 (Low): 3 tickets
 - **Estimated Timeline**: ~2.5-3 weeks for core implementation
@@ -528,10 +533,11 @@ _Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **11/25 tickets c
 - ✅ TICKET-009: Tile Generation Optimization (2026-01-11)
 - ✅ TICKET-010: Master Pipeline Orchestration Script (2026-01-11)
 - ✅ TICKET-011: Configure Cron Job for Hourly Execution (2026-01-11)
+- ✅ TICKET-012: Create Metadata Generation Script (2026-01-11)
 
 **Next Up**:
-- 📝 TICKET-012: Create Metadata Generation Script (P1, S effort)
 - 📝 TICKET-013: Create Mapbox Web Application (P1, L effort)
+- 📝 TICKET-014: Implement Forecast Hour Animation (P2, M effort)
 
 **Dependencies**:
 

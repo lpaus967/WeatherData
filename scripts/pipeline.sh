@@ -381,36 +381,68 @@ generate_metadata() {
     log_info "==> Step 6: Generating metadata..."
 
     local metadata_file="$WORK_DIR/latest.json"
+    local metadata_dir="$WORK_DIR/metadata"
+    mkdir -p "$metadata_dir"
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY-RUN] Would generate metadata JSON"
         return 0
     fi
 
-    # Count variables
-    local variable_count=$(find "$COLORED_DIR" -name "*_colored.tif" | wc -l)
+    # Use Python script to generate comprehensive metadata
+    local cmd="docker run --rm \
+        --user $(id -u):$(id -g) \
+        -e HOME=/tmp \
+        -v $TILES_DIR:/data/tiles \
+        -v $metadata_dir:/data/output \
+        -v $PROJECT_ROOT:/app \
+        weather-processor:latest \
+        python3 /app/scripts/generate_metadata.py \
+        --date $MODEL_DATE \
+        --cycle $MODEL_CYCLE \
+        --s3-bucket $S3_BUCKET \
+        --tiles-dir /data/tiles \
+        --config /app/config/variables.yaml \
+        --output /data/output/latest.json"
 
-    # Generate metadata JSON
-    cat > "$metadata_file" << EOF
+    log_info "Executing metadata generation..."
+
+    if $cmd >> "$LOG_FILE" 2>&1; then
+        log_success "Metadata generated"
+
+        # Copy to work dir for upload
+        if [[ -f "$metadata_dir/latest.json" ]]; then
+            cp "$metadata_dir/latest.json" "$metadata_file"
+        fi
+    else
+        log_warn "Python metadata generation failed, using fallback"
+        # Fallback: Generate simple metadata
+        local variable_count=$(find "$COLORED_DIR" -name "*_colored.tif" 2>/dev/null | wc -l)
+        cat > "$metadata_file" << EOF
 {
+  "version": "1.0",
   "model": "hrrr",
   "product": "sfc",
   "model_run": {
     "date": "${MODEL_DATE}",
-    "cycle": "${MODEL_CYCLE}z",
+    "cycle": "${MODEL_CYCLE}",
+    "cycle_formatted": "${MODEL_CYCLE}Z",
     "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   },
   "forecast_hours": ["00"],
-  "variables": ${variable_count},
-  "tiles_enabled": ${ENABLE_TILES},
-  "zoom_levels": "${ZOOM_LEVELS}",
+  "variables": [],
+  "variable_count": ${variable_count},
+  "tiles": {
+    "url_template": "https://${S3_BUCKET}.s3.us-east-2.amazonaws.com/tiles/{variable}/{timestamp}/{forecast}/{z}/{x}/{y}.png",
+    "format": "png",
+    "tile_size": 256
+  },
   "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "pipeline_version": "1.0",
-  "base_url": "https://${S3_BUCKET}.s3.amazonaws.com"
+  "pipeline_version": "1.0"
 }
 EOF
-
-    log_success "Metadata generated: $metadata_file"
+        log_info "Fallback metadata generated"
+    fi
 
     # Upload metadata to S3
     if [[ "$ENABLE_S3_UPLOAD" == "true" ]] && [[ -n "$S3_BUCKET" ]]; then
