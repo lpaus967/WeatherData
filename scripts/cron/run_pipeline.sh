@@ -12,12 +12,14 @@ set -euo pipefail
 
 # Script location
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Source environment variables
+# Source environment variables first (may override PROJECT_ROOT)
 if [[ -f "$SCRIPT_DIR/weather-pipeline.env" ]]; then
     source "$SCRIPT_DIR/weather-pipeline.env"
 fi
+
+# Calculate PROJECT_ROOT if not set in env file
+PROJECT_ROOT="${PROJECT_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 
 # Ensure log directory exists
 mkdir -p "${LOG_DIR:-/var/log/weather-pipeline}"
