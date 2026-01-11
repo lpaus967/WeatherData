@@ -109,12 +109,7 @@ check_dependencies() {
 
     local missing_deps=()
 
-    # Check Python
-    if ! command -v python3 &> /dev/null; then
-        missing_deps+=("python3")
-    fi
-
-    # Check Docker
+    # Check Docker (required for all processing steps)
     if ! command -v docker &> /dev/null; then
         missing_deps+=("docker")
     fi
@@ -164,19 +159,23 @@ download_data() {
     local download_dir="$WORK_DIR/downloads"
     mkdir -p "$download_dir"
 
-    local cmd="python3 $SCRIPT_DIR/hrrr/download_hrrr.py \
-        --date $MODEL_DATE \
-        --cycle $MODEL_CYCLE \
-        --fxx 0 \
-        --variables all \
-        --output $download_dir"
-
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY-RUN] Would execute: $cmd"
+        log_info "[DRY-RUN] Would download HRRR data via Docker"
         # Create dummy file for dry run
         touch "$download_dir/hrrr.${MODEL_DATE}.t${MODEL_CYCLE}z.f00.grib2"
         return 0
     fi
+
+    local cmd="docker run --rm \
+        -v $download_dir:/data/output \
+        -v $PROJECT_ROOT:/app \
+        weather-processor:latest \
+        python3 /app/scripts/hrrr/download_hrrr.py \
+        --date $MODEL_DATE \
+        --cycle $MODEL_CYCLE \
+        --fxx 0 \
+        --variables all \
+        --output /data/output"
 
     log_info "Executing: $cmd"
 
