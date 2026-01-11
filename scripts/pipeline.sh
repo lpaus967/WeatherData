@@ -175,7 +175,8 @@ download_data() {
         --cycle $MODEL_CYCLE \
         --fxx 0 \
         --variables all \
-        --output /data/output"
+        --output /data/output \
+        --keep-local"
 
     log_info "Executing: $cmd"
 
