@@ -154,8 +154,414 @@ resource "aws_cloudwatch_log_metric_filter" "pipeline_success" {
 }
 
 ###################
+# CloudWatch Dashboard
+# Part of TICKET-018: Create CloudWatch Dashboard
+###################
+
+resource "aws_cloudwatch_dashboard" "weather_pipeline" {
+  dashboard_name = "WeatherPipeline"
+
+  dashboard_body = jsonencode({
+    widgets = [
+      # Row 1: Header and Key Metrics
+      {
+        type   = "text"
+        x      = 0
+        y      = 0
+        width  = 24
+        height = 1
+        properties = {
+          markdown = "# Weather Data Pipeline Dashboard\nReal-time monitoring of HRRR weather data processing pipeline"
+        }
+      },
+      # Data Age - Single Value
+      {
+        type   = "metric"
+        x      = 0
+        y      = 1
+        width  = 6
+        height = 4
+        properties = {
+          metrics = [
+            ["WeatherPipeline", "DataAge", "Pipeline", "HRRR", { stat = "Average", period = 300 }]
+          ]
+          title  = "Data Age (minutes)"
+          view   = "singleValue"
+          region = var.aws_region
+          stat   = "Average"
+          period = 300
+        }
+      },
+      # Processing Time - Single Value
+      {
+        type   = "metric"
+        x      = 6
+        y      = 1
+        width  = 6
+        height = 4
+        properties = {
+          metrics = [
+            ["WeatherPipeline", "ProcessingTime", "Pipeline", "HRRR", { stat = "Average", period = 300 }]
+          ]
+          title  = "Last Processing Time (sec)"
+          view   = "singleValue"
+          region = var.aws_region
+          stat   = "Average"
+          period = 300
+        }
+      },
+      # Success Count - Single Value
+      {
+        type   = "metric"
+        x      = 12
+        y      = 1
+        width  = 6
+        height = 4
+        properties = {
+          metrics = [
+            ["WeatherPipeline", "Success", "Pipeline", "HRRR", { stat = "Sum", period = 86400 }]
+          ]
+          title  = "Successful Runs (24h)"
+          view   = "singleValue"
+          region = var.aws_region
+          stat   = "Sum"
+          period = 86400
+        }
+      },
+      # Error Count - Single Value
+      {
+        type   = "metric"
+        x      = 18
+        y      = 1
+        width  = 6
+        height = 4
+        properties = {
+          metrics = [
+            ["WeatherPipeline", "Errors", "Pipeline", "HRRR", { stat = "Sum", period = 86400 }]
+          ]
+          title  = "Errors (24h)"
+          view   = "singleValue"
+          region = var.aws_region
+          stat   = "Sum"
+          period = 86400
+        }
+      },
+      # Row 2: Time Series Charts
+      # Data Age Over Time
+      {
+        type   = "metric"
+        x      = 0
+        y      = 5
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            ["WeatherPipeline", "DataAge", "Pipeline", "HRRR"]
+          ]
+          title  = "Data Age Over Time (24h)"
+          view   = "timeSeries"
+          region = var.aws_region
+          stat   = "Average"
+          period = 300
+          yAxis = {
+            left = {
+              min   = 0
+              label = "Minutes"
+            }
+          }
+        }
+      },
+      # Processing Time Trend
+      {
+        type   = "metric"
+        x      = 12
+        y      = 5
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            ["WeatherPipeline", "ProcessingTime", "Pipeline", "HRRR"]
+          ]
+          title  = "Processing Time Trend (24h)"
+          view   = "timeSeries"
+          region = var.aws_region
+          stat   = "Average"
+          period = 300
+          yAxis = {
+            left = {
+              min   = 0
+              label = "Seconds"
+            }
+          }
+        }
+      },
+      # Row 3: File Processing Metrics
+      # Files Downloaded
+      {
+        type   = "metric"
+        x      = 0
+        y      = 11
+        width  = 8
+        height = 6
+        properties = {
+          metrics = [
+            ["WeatherPipeline", "FilesDownloaded", "Pipeline", "HRRR", "Step", "Download"]
+          ]
+          title  = "Files Downloaded Per Run"
+          view   = "timeSeries"
+          region = var.aws_region
+          stat   = "Sum"
+          period = 3600
+          yAxis = {
+            left = {
+              min = 0
+            }
+          }
+        }
+      },
+      # Files Processed
+      {
+        type   = "metric"
+        x      = 8
+        y      = 11
+        width  = 8
+        height = 6
+        properties = {
+          metrics = [
+            ["WeatherPipeline", "FilesProcessed", "Pipeline", "HRRR", "Step", "Processing"]
+          ]
+          title  = "COG Files Processed Per Run"
+          view   = "timeSeries"
+          region = var.aws_region
+          stat   = "Sum"
+          period = 3600
+          yAxis = {
+            left = {
+              min = 0
+            }
+          }
+        }
+      },
+      # Tiles Generated
+      {
+        type   = "metric"
+        x      = 16
+        y      = 11
+        width  = 8
+        height = 6
+        properties = {
+          metrics = [
+            ["WeatherPipeline", "TilesGenerated", "Pipeline", "HRRR", "Step", "TileGeneration"]
+          ]
+          title  = "Tiles Generated Per Run"
+          view   = "timeSeries"
+          region = var.aws_region
+          stat   = "Sum"
+          period = 3600
+          yAxis = {
+            left = {
+              min = 0
+            }
+          }
+        }
+      },
+      # Row 4: Step Duration and Errors
+      # Step Duration Breakdown
+      {
+        type   = "metric"
+        x      = 0
+        y      = 17
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            ["WeatherPipeline", "StepDuration", "Pipeline", "HRRR", "Step", "Download", { label = "Download" }],
+            [".", ".", ".", ".", ".", "Processing", { label = "Processing" }],
+            [".", ".", ".", ".", ".", "Colormap", { label = "Colormap" }],
+            [".", ".", ".", ".", ".", "TileGeneration", { label = "Tile Generation" }],
+            [".", ".", ".", ".", ".", "S3Upload", { label = "S3 Upload" }],
+            [".", ".", ".", ".", ".", "Metadata", { label = "Metadata" }]
+          ]
+          title  = "Step Duration Breakdown"
+          view   = "timeSeries"
+          region = var.aws_region
+          stat   = "Average"
+          period = 3600
+          stacked = true
+          yAxis = {
+            left = {
+              min   = 0
+              label = "Seconds"
+            }
+          }
+        }
+      },
+      # Error Counts by Type
+      {
+        type   = "metric"
+        x      = 12
+        y      = 17
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            ["WeatherPipeline", "PipelineErrors", { label = "Pipeline Errors" }],
+            [".", "DownloadErrors", { label = "Download Errors" }],
+            [".", "ProcessingErrors", { label = "Processing Errors" }],
+            [".", "TileGenerationErrors", { label = "Tile Errors" }],
+            [".", "S3UploadErrors", { label = "S3 Upload Errors" }]
+          ]
+          title  = "Errors by Type (24h)"
+          view   = "timeSeries"
+          region = var.aws_region
+          stat   = "Sum"
+          period = 3600
+          yAxis = {
+            left = {
+              min = 0
+            }
+          }
+        }
+      },
+      # Row 5: EC2 Metrics
+      {
+        type   = "text"
+        x      = 0
+        y      = 23
+        width  = 24
+        height = 1
+        properties = {
+          markdown = "## EC2 Instance Metrics"
+        }
+      },
+      # CPU Utilization
+      {
+        type   = "metric"
+        x      = 0
+        y      = 24
+        width  = 8
+        height = 6
+        properties = {
+          metrics = [
+            ["WeatherPipeline/EC2", "cpu_usage_user", { label = "User" }],
+            [".", "cpu_usage_system", { label = "System" }]
+          ]
+          title  = "CPU Utilization"
+          view   = "timeSeries"
+          region = var.aws_region
+          stat   = "Average"
+          period = 300
+          yAxis = {
+            left = {
+              min   = 0
+              max   = 100
+              label = "Percent"
+            }
+          }
+        }
+      },
+      # Memory Utilization
+      {
+        type   = "metric"
+        x      = 8
+        y      = 24
+        width  = 8
+        height = 6
+        properties = {
+          metrics = [
+            ["WeatherPipeline/EC2", "mem_used_percent"]
+          ]
+          title  = "Memory Utilization"
+          view   = "timeSeries"
+          region = var.aws_region
+          stat   = "Average"
+          period = 300
+          yAxis = {
+            left = {
+              min   = 0
+              max   = 100
+              label = "Percent"
+            }
+          }
+        }
+      },
+      # Disk Utilization
+      {
+        type   = "metric"
+        x      = 16
+        y      = 24
+        width  = 8
+        height = 6
+        properties = {
+          metrics = [
+            ["WeatherPipeline/EC2", "disk_used_percent", "path", "/", { label = "Root (/)" }],
+            [".", ".", ".", "/home", { label = "Home (/home)" }]
+          ]
+          title  = "Disk Utilization"
+          view   = "timeSeries"
+          region = var.aws_region
+          stat   = "Average"
+          period = 300
+          yAxis = {
+            left = {
+              min   = 0
+              max   = 100
+              label = "Percent"
+            }
+          }
+        }
+      },
+      # Row 6: Log Insights
+      {
+        type   = "text"
+        x      = 0
+        y      = 30
+        width  = 24
+        height = 1
+        properties = {
+          markdown = "## Recent Pipeline Activity"
+        }
+      },
+      # Recent Errors Log Query
+      {
+        type   = "log"
+        x      = 0
+        y      = 31
+        width  = 12
+        height = 6
+        properties = {
+          query  = "SOURCE '/weather-pipeline/pipeline' | fields @timestamp, @message | filter @message like /ERROR/ | sort @timestamp desc | limit 20"
+          region = var.aws_region
+          title  = "Recent Errors"
+          view   = "table"
+        }
+      },
+      # Recent Success Log Query
+      {
+        type   = "log"
+        x      = 12
+        y      = 31
+        width  = 12
+        height = 6
+        properties = {
+          query  = "SOURCE '/weather-pipeline/pipeline' | fields @timestamp, @message | filter @message like /SUCCESS|completed/ | sort @timestamp desc | limit 20"
+          region = var.aws_region
+          title  = "Recent Successes"
+          view   = "table"
+        }
+      }
+    ]
+  })
+}
+
+###################
 # Outputs
 ###################
+
+output "dashboard_url" {
+  description = "URL to the CloudWatch Dashboard"
+  value       = "https://${var.aws_region}.console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=${aws_cloudwatch_dashboard.weather_pipeline.dashboard_name}"
+}
 
 output "log_group_arns" {
   description = "ARNs of created log groups"
