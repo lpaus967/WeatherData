@@ -26,9 +26,9 @@ variable "environment" {
 
 # S3 Lifecycle Policies
 variable "grib2_retention_days" {
-  description = "Number of days to retain raw GRIB2 files"
+  description = "Number of days to retain raw GRIB2 files (safety net - pipeline cleans up old files automatically)"
   type        = number
-  default     = 7
+  default     = 1
 }
 
 variable "cog_retention_days" {

@@ -262,7 +262,7 @@ variables:
     typical_range: [0, 20]
     color_ramp: "visibility"
     priority: 1
-    enabled: false
+    enabled: true
 
   snow_depth:
     grib_search: "SNOD:surface"
@@ -274,7 +274,7 @@ variables:
     typical_range: [0, 100]
     color_ramp: "snow_depth"
     priority: 1
-    enabled: false
+    enabled: true
 
   snow_cover:
     grib_search: "SNOWC:surface"
@@ -286,7 +286,7 @@ variables:
     typical_range: [0, 100]
     color_ramp: "snow_cover"
     priority: 1
-    enabled: false
+    enabled: true
 
 # ==========================================
 # Color Ramp Definitions

@@ -477,6 +477,62 @@ EOF
     return 0
 }
 
+cleanup_old_grib_files() {
+    # Clean up old GRIB files from S3, keeping only the most recent model run
+    # This prevents storage costs from accumulating with 7+ GRIB files per hour
+
+    if [[ "$ENABLE_S3_UPLOAD" != "true" ]] || [[ -z "$S3_BUCKET" ]]; then
+        return 0
+    fi
+
+    log_info "Cleaning up old GRIB files from S3..."
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY-RUN] Would clean up old GRIB files"
+        return 0
+    fi
+
+    # Get timestamp for the current run (keep this one)
+    local current_run_date="${MODEL_DATE//-/}"  # Remove dashes: 2026-01-11 -> 20260111
+    local current_run_pattern="hrrr.${current_run_date}.t${MODEL_CYCLE}z"
+
+    # List all GRIB files and delete anything that doesn't match current run
+    log_info "Keeping files matching: $current_run_pattern"
+
+    # List all grib2 files in raw-grib2 prefix
+    local grib_files=$(aws s3 ls "s3://$S3_BUCKET/raw-grib2/" --recursive 2>/dev/null | grep "\.grib2$" || true)
+
+    if [[ -z "$grib_files" ]]; then
+        log_info "No GRIB files found to clean up"
+        return 0
+    fi
+
+    local deleted_count=0
+    local kept_count=0
+
+    while IFS= read -r line; do
+        # Extract the S3 key from ls output
+        local s3_key=$(echo "$line" | awk '{print $4}')
+
+        if [[ -z "$s3_key" ]]; then
+            continue
+        fi
+
+        # Check if this file is from the current run
+        if [[ "$s3_key" == *"$current_run_pattern"* ]]; then
+            kept_count=$((kept_count + 1))
+        else
+            # Delete old GRIB file
+            if aws s3 rm "s3://$S3_BUCKET/$s3_key" --quiet >> "$LOG_FILE" 2>&1; then
+                deleted_count=$((deleted_count + 1))
+            fi
+        fi
+    done <<< "$grib_files"
+
+    log_info "GRIB cleanup complete: kept $kept_count files, deleted $deleted_count old files"
+    return 0
+}
+
 send_cloudwatch_metrics() {
     if ! command -v aws &> /dev/null; then
         return 0
@@ -652,6 +708,9 @@ main() {
     generate_tiles || exit 1
     upload_to_s3 || exit 1
     generate_metadata || exit 1
+
+    # Clean up old GRIB files to reduce S3 storage costs
+    cleanup_old_grib_files
 
     # Send metrics
     send_cloudwatch_metrics
