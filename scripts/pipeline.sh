@@ -157,14 +157,19 @@ calculate_model_run_time() {
 
 download_data() {
     log_info "==> Step 1: Downloading HRRR data..."
+    start_step_timer "Download"
 
     local download_dir="$WORK_DIR/downloads"
     mkdir -p "$download_dir"
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY-RUN] Would download HRRR data via Docker"
-        # Create dummy file for dry run
-        touch "$download_dir/hrrr.${MODEL_DATE}.t${MODEL_CYCLE}z.f00.grib2"
+        # Create dummy files for dry run
+        for fxx in 00 01 02 03 04 05 06; do
+            touch "$download_dir/hrrr.${MODEL_DATE//-/}.t${MODEL_CYCLE}z.f${fxx}.grib2"
+        done
+        FILES_DOWNLOADED=7
+        end_step_timer "Download"
         return 0
     fi
 
@@ -191,11 +196,13 @@ download_data() {
         # Find all downloaded GRIB files
         GRIB2_FILES=($(find "$download_dir" -name "*.grib2" | sort))
         if [[ ${#GRIB2_FILES[@]} -eq 0 ]]; then
-            log_error "No GRIB2 files found after download"
+            record_pipeline_error "Download" "No GRIB2 files found after download"
+            end_step_timer "Download"
             return 1
         fi
 
-        log_info "Downloaded ${#GRIB2_FILES[@]} GRIB2 files:"
+        FILES_DOWNLOADED=${#GRIB2_FILES[@]}
+        log_info "Downloaded ${FILES_DOWNLOADED} GRIB2 files:"
         for f in "${GRIB2_FILES[@]}"; do
             local file_size=$(du -h "$f" | cut -f1)
             log_info "  - $(basename $f) ($file_size)"
@@ -203,15 +210,18 @@ download_data() {
 
         export GRIB2_FILES
         export DOWNLOAD_DIR="$download_dir"
+        end_step_timer "Download"
         return 0
     else
-        log_error "Download failed"
+        record_pipeline_error "Download" "Download failed"
+        end_step_timer "Download"
         return 1
     fi
 }
 
 process_grib2() {
     log_info "==> Step 2: Processing GRIB2 to COGs..."
+    start_step_timer "Processing"
 
     local processed_dir="$WORK_DIR/processed"
     mkdir -p "$processed_dir"
@@ -223,11 +233,14 @@ process_grib2() {
             touch "$processed_dir/temperature_2m_hrrr.${MODEL_DATE}.t${MODEL_CYCLE}z.f${fxx}.tif"
             touch "$processed_dir/wind_u_10m_hrrr.${MODEL_DATE}.t${MODEL_CYCLE}z.f${fxx}.tif"
         done
+        FILES_PROCESSED=14
+        end_step_timer "Processing"
         return 0
     fi
 
     # Process each GRIB file
     local processed_count=0
+    local failed_count=0
     local total_files=${#GRIB2_FILES[@]}
 
     for grib_file in "${GRIB2_FILES[@]}"; do
@@ -250,21 +263,30 @@ process_grib2() {
         if $cmd >> "$LOG_FILE" 2>&1; then
             log_info "  Processed: $grib_name"
         else
+            failed_count=$((failed_count + 1))
             log_warn "  Failed to process: $grib_name (continuing with remaining files)"
         fi
     done
 
+    # Record any processing failures
+    if [[ $failed_count -gt 0 ]]; then
+        record_pipeline_error "Processing" "Failed to process $failed_count of $total_files GRIB files"
+    fi
+
     log_success "GRIB2 processing completed"
 
     # Count processed files
-    local cog_count=$(find "$processed_dir" -name "*.tif" | wc -l)
+    local cog_count=$(find "$processed_dir" -name "*.tif" | wc -l | tr -d ' ')
+    FILES_PROCESSED=$cog_count
     log_info "Generated $cog_count COG files from $total_files GRIB files"
     export PROCESSED_DIR="$processed_dir"
+    end_step_timer "Processing"
     return 0
 }
 
 apply_colormaps() {
     log_info "==> Step 3: Applying color ramps..."
+    start_step_timer "Colormap"
 
     local colored_dir="$WORK_DIR/colored"
     mkdir -p "$colored_dir"
@@ -272,7 +294,10 @@ apply_colormaps() {
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY-RUN] Would apply color ramps to COGs"
         # Create dummy files
-        touch "$colored_dir/temperature_2m_hrrr.${MODEL_DATE}.t${MODEL_CYCLE}z.f00_colored.tif"
+        for fxx in 00 01 02 03 04 05 06; do
+            touch "$colored_dir/temperature_2m_hrrr.${MODEL_DATE}.t${MODEL_CYCLE}z.f${fxx}_colored.tif"
+        done
+        end_step_timer "Colormap"
         return 0
     fi
 
@@ -292,12 +317,14 @@ apply_colormaps() {
     if $cmd >> "$LOG_FILE" 2>&1; then
         log_success "Color ramp application completed"
 
-        local colored_count=$(find "$colored_dir" -name "*_colored.tif" | wc -l)
+        local colored_count=$(find "$colored_dir" -name "*_colored.tif" | wc -l | tr -d ' ')
         log_info "Generated $colored_count colored COG files"
         export COLORED_DIR="$colored_dir"
+        end_step_timer "Colormap"
         return 0
     else
-        log_error "Color ramp application failed"
+        record_pipeline_error "Colormap" "Color ramp application failed"
+        end_step_timer "Colormap"
         return 1
     fi
 }
@@ -309,6 +336,7 @@ generate_tiles() {
     fi
 
     log_info "==> Step 4: Generating web map tiles..."
+    start_step_timer "TileGeneration"
 
     local tiles_dir="$WORK_DIR/tiles"
     mkdir -p "$tiles_dir"
@@ -316,7 +344,11 @@ generate_tiles() {
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY-RUN] Would generate tiles from colored COGs"
         mkdir -p "$tiles_dir/temperature_2m/${MODEL_DATE}T${MODEL_CYCLE}z/00/0/0"
-        touch "$tiles_dir/temperature_2m/${MODEL_DATE}T${MODEL_CYCLE}z/00/0/0/0.png"
+        for i in {0..9}; do
+            touch "$tiles_dir/temperature_2m/${MODEL_DATE}T${MODEL_CYCLE}z/00/0/0/${i}.png"
+        done
+        TILES_GENERATED=10
+        end_step_timer "TileGeneration"
         return 0
     fi
 
@@ -340,12 +372,15 @@ generate_tiles() {
     if $cmd >> "$LOG_FILE" 2>&1; then
         log_success "Tile generation completed"
 
-        local tile_count=$(find "$tiles_dir" -name "*.png" | wc -l)
+        local tile_count=$(find "$tiles_dir" -name "*.png" | wc -l | tr -d ' ')
+        TILES_GENERATED=$tile_count
         log_info "Generated $tile_count tiles"
         export TILES_DIR="$tiles_dir"
+        end_step_timer "TileGeneration"
         return 0
     else
-        log_error "Tile generation failed"
+        record_pipeline_error "TileGeneration" "Tile generation failed"
+        end_step_timer "TileGeneration"
         return 1
     fi
 }
@@ -362,9 +397,11 @@ upload_to_s3() {
     fi
 
     log_info "==> Step 5: Uploading to S3..."
+    start_step_timer "S3Upload"
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY-RUN] Would upload to s3://$S3_BUCKET"
+        end_step_timer "S3Upload"
         return 0
     fi
 
@@ -375,7 +412,8 @@ upload_to_s3() {
         --quiet >> "$LOG_FILE" 2>&1; then
         log_success "Colored COGs uploaded"
     else
-        log_error "Failed to upload colored COGs"
+        record_pipeline_error "S3Upload" "Failed to upload colored COGs"
+        end_step_timer "S3Upload"
         return 1
     fi
 
@@ -386,16 +424,19 @@ upload_to_s3() {
             --quiet >> "$LOG_FILE" 2>&1; then
             log_success "Tiles uploaded"
         else
-            log_error "Failed to upload tiles"
+            record_pipeline_error "S3Upload" "Failed to upload tiles"
+            end_step_timer "S3Upload"
             return 1
         fi
     fi
 
+    end_step_timer "S3Upload"
     return 0
 }
 
 generate_metadata() {
     log_info "==> Step 6: Generating metadata..."
+    start_step_timer "Metadata"
 
     local metadata_file="$WORK_DIR/latest.json"
     local metadata_dir="$WORK_DIR/metadata"
@@ -403,6 +444,7 @@ generate_metadata() {
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY-RUN] Would generate metadata JSON"
+        end_step_timer "Metadata"
         return 0
     fi
 
@@ -474,6 +516,7 @@ EOF
         fi
     fi
 
+    end_step_timer "Metadata"
     return 0
 }
 
@@ -533,38 +576,139 @@ cleanup_old_grib_files() {
     return 0
 }
 
+# ============================================================================
+# CloudWatch Metrics Functions (TICKET-016)
+# ============================================================================
+
+# Global variables for step timing
+declare -A STEP_START_TIMES
+declare -A STEP_DURATIONS
+METRICS_NAMESPACE="WeatherPipeline"
+PIPELINE_ERRORS=0
+FILES_DOWNLOADED=0
+FILES_PROCESSED=0
+TILES_GENERATED=0
+
+start_step_timer() {
+    local step_name="$1"
+    STEP_START_TIMES[$step_name]=$(date +%s)
+}
+
+end_step_timer() {
+    local step_name="$1"
+    local end_time=$(date +%s)
+    local start_time=${STEP_START_TIMES[$step_name]:-$end_time}
+    STEP_DURATIONS[$step_name]=$((end_time - start_time))
+    log_info "Step '$step_name' completed in ${STEP_DURATIONS[$step_name]}s"
+}
+
+send_metric() {
+    local metric_name="$1"
+    local value="$2"
+    local unit="${3:-Count}"
+    local dimensions="${4:-Pipeline=HRRR}"
+
+    if ! command -v aws &> /dev/null; then
+        return 0
+    fi
+
+    aws cloudwatch put-metric-data \
+        --namespace "$METRICS_NAMESPACE" \
+        --metric-name "$metric_name" \
+        --value "$value" \
+        --unit "$unit" \
+        --dimensions "$dimensions" >> "$LOG_FILE" 2>&1 || {
+            log_warn "Failed to send metric: $metric_name"
+        }
+}
+
 send_cloudwatch_metrics() {
     if ! command -v aws &> /dev/null; then
+        log_warn "AWS CLI not found, skipping CloudWatch metrics"
         return 0
     fi
 
     log_info "Sending CloudWatch metrics..."
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        log_info "[DRY-RUN] Would send CloudWatch metrics"
+        log_info "[DRY-RUN] Would send CloudWatch metrics:"
+        log_info "  - ProcessingTime: $(($(date +%s) - START_TIME))s"
+        log_info "  - FilesDownloaded: ${FILES_DOWNLOADED:-0}"
+        log_info "  - FilesProcessed: ${FILES_PROCESSED:-0}"
+        log_info "  - TilesGenerated: ${TILES_GENERATED:-0}"
+        log_info "  - Errors: $PIPELINE_ERRORS"
         return 0
     fi
 
     local duration=$(($(date +%s) - START_TIME))
-    local namespace="WeatherPipeline"
 
-    # Send pipeline duration metric
-    aws cloudwatch put-metric-data \
-        --namespace "$namespace" \
-        --metric-name ProcessingTime \
-        --value "$duration" \
-        --unit Seconds \
-        --dimensions Pipeline=HRRR >> "$LOG_FILE" 2>&1 || true
+    # Calculate data age (minutes since model run)
+    local model_epoch
+    if date -j -f "%Y-%m-%d %H" "$MODEL_DATE $MODEL_CYCLE" +%s &> /dev/null; then
+        # BSD date (macOS)
+        model_epoch=$(date -j -f "%Y-%m-%d %H" "$MODEL_DATE $MODEL_CYCLE" +%s 2>/dev/null || echo "0")
+    else
+        # GNU date (Linux)
+        model_epoch=$(date -d "$MODEL_DATE $MODEL_CYCLE:00:00 UTC" +%s 2>/dev/null || echo "0")
+    fi
+    local current_epoch=$(date +%s)
+    local data_age_minutes=0
+    if [[ "$model_epoch" -gt 0 ]]; then
+        data_age_minutes=$(( (current_epoch - model_epoch) / 60 ))
+    fi
 
-    # Send success metric
-    aws cloudwatch put-metric-data \
-        --namespace "$namespace" \
-        --metric-name Success \
-        --value 1 \
-        --unit Count \
-        --dimensions Pipeline=HRRR >> "$LOG_FILE" 2>&1 || true
+    # Send all metrics
+    log_info "Sending metrics to CloudWatch namespace: $METRICS_NAMESPACE"
 
-    log_info "CloudWatch metrics sent"
+    # 1. Total pipeline processing time
+    send_metric "ProcessingTime" "$duration" "Seconds" "Pipeline=HRRR"
+
+    # 2. Data age (minutes since model run)
+    send_metric "DataAge" "$data_age_minutes" "None" "Pipeline=HRRR"
+
+    # 3. Files downloaded count
+    send_metric "FilesDownloaded" "${FILES_DOWNLOADED:-0}" "Count" "Pipeline=HRRR,Step=Download"
+
+    # 4. Files processed count
+    send_metric "FilesProcessed" "${FILES_PROCESSED:-0}" "Count" "Pipeline=HRRR,Step=Processing"
+
+    # 5. Tiles generated count
+    send_metric "TilesGenerated" "${TILES_GENERATED:-0}" "Count" "Pipeline=HRRR,Step=TileGeneration"
+
+    # 6. Error count
+    send_metric "Errors" "$PIPELINE_ERRORS" "Count" "Pipeline=HRRR"
+
+    # 7. Success metric (1 if no errors, 0 if errors)
+    if [[ "$PIPELINE_ERRORS" -eq 0 ]]; then
+        send_metric "Success" "1" "Count" "Pipeline=HRRR"
+    else
+        send_metric "Failure" "1" "Count" "Pipeline=HRRR"
+    fi
+
+    # 8. Per-step duration metrics
+    for step in "${!STEP_DURATIONS[@]}"; do
+        send_metric "StepDuration" "${STEP_DURATIONS[$step]}" "Seconds" "Pipeline=HRRR,Step=$step"
+    done
+
+    log_success "CloudWatch metrics sent successfully"
+    log_info "  Total Duration: ${duration}s"
+    log_info "  Data Age: ${data_age_minutes} minutes"
+    log_info "  Files Downloaded: ${FILES_DOWNLOADED:-0}"
+    log_info "  Files Processed: ${FILES_PROCESSED:-0}"
+    log_info "  Tiles Generated: ${TILES_GENERATED:-0}"
+    log_info "  Errors: $PIPELINE_ERRORS"
+}
+
+record_pipeline_error() {
+    local step="$1"
+    local message="${2:-Unknown error}"
+    PIPELINE_ERRORS=$((PIPELINE_ERRORS + 1))
+    log_error "[$step] $message"
+
+    # Send immediate error metric
+    if [[ "$DRY_RUN" != "true" ]] && command -v aws &> /dev/null; then
+        send_metric "Errors" "1" "Count" "Pipeline=HRRR,Step=$step"
+    fi
 }
 
 usage() {
