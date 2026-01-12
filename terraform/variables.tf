@@ -81,6 +81,13 @@ variable "enable_ec2" {
   default     = false # Set to true when ready for TICKET-002
 }
 
+# CloudWatch Configuration
+variable "log_retention_days" {
+  description = "Number of days to retain CloudWatch logs"
+  type        = number
+  default     = 30
+}
+
 # Tags
 variable "project_tags" {
   description = "Common tags for all resources"

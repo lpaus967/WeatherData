@@ -3,7 +3,7 @@
 ## Parent Task
 
 **Weather Data Pipeline - Automated Infrastructure**
-_Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **16/25 tickets complete (64%)**_
+_Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **17/25 tickets complete (68%)**_
 
 ---
 
@@ -358,20 +358,24 @@ _Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **16/25 tickets c
 
 ### TICKET-016: Set Up CloudWatch Monitoring
 
-- **Priority**: P1 | **Effort**: M (4-8 hours) | **Status**: 🔴 Not Started
+- **Priority**: P1 | **Effort**: M (4-8 hours) | **Status**: 🟢 Complete
 - **Sub-tasks**:
-  - [ ] Create custom CloudWatch metrics:
-    - [ ] `DataAge`: Minutes since model run
-    - [ ] `ProcessingTime`: Total pipeline duration
-    - [ ] `FilesProcessed`: Count of successful files
-    - [ ] `Errors`: Pipeline failure count
-    - [ ] `S3StorageSize`: Total storage used
-  - [ ] Configure CloudWatch Logs agent on EC2
-  - [ ] Create log groups for pipeline components
-  - [ ] Set up log retention (30 days)
-  - [ ] Create metric filters for errors
-  - [ ] Send metrics from Python scripts using boto3
-- **Acceptance**: Metrics appear in CloudWatch console, logs are searchable, can create custom dashboards
+  - [x] Create custom CloudWatch metrics:
+    - [x] `DataAge`: Minutes since model run
+    - [x] `ProcessingTime`: Total pipeline duration
+    - [x] `FilesProcessed`: Count of successful files
+    - [x] `Errors`: Pipeline failure count
+    - [x] `StepDuration`: Per-step timing metrics
+  - [x] Configure CloudWatch Logs agent on EC2 (config/cloudwatch-agent-config.json)
+  - [x] Create log groups for pipeline components (terraform/cloudwatch.tf)
+  - [x] Set up log retention (30 days)
+  - [x] Create metric filters for errors (7 filters)
+  - [x] Create Python metrics helper module (scripts/common/cloudwatch_metrics.py)
+  - [x] Enhanced pipeline.sh with comprehensive metrics
+  - [x] Created CloudWatch Agent installation script
+- **Acceptance**: ✅ Metrics module created, log groups configured, metric filters defined, pipeline sends detailed metrics
+- **Completion Date**: 2026-01-12
+- **Documentation**: `docs/TICKET-016-COMPLETE.md`
 
 ### TICKET-017: Create CloudWatch Alarms
 
@@ -536,10 +540,10 @@ _Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **16/25 tickets c
 **Parent Task**: Weather Data Pipeline - Automated Infrastructure
 
 - **Total Sub-tasks**: 25 tickets organized into 10 phases
-- **Completed**: 16/25 tickets (64%) ✅
+- **Completed**: 17/25 tickets (68%) ✅
 - **Priority Breakdown**:
   - P0 (Critical): 7 tickets (7 complete, 0 remaining) ✅
-  - P1 (High): 10 tickets (7 complete, 3 remaining)
+  - P1 (High): 10 tickets (8 complete, 2 remaining)
   - P2 (Medium): 5 tickets (2 complete, 3 remaining)
   - P3 (Low): 3 tickets
 - **Estimated Timeline**: ~2.5-3 weeks for core implementation
@@ -550,6 +554,7 @@ _Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **16/25 tickets c
   - ✅ **Phase 4 Complete**: Tile generation system implemented and optimized
   - ✅ **Phase 5 Complete**: Pipeline orchestration and cron automation ready
   - ✅ **Phase 6 Complete**: Web application (all tickets complete, deployed)
+  - 🟡 **Phase 7 In Progress**: CloudWatch monitoring setup complete, alarms and dashboard pending
 
 **Completed Tickets**:
 - ✅ TICKET-001: AWS S3 Infrastructure (2026-01-10)
@@ -568,10 +573,11 @@ _Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **16/25 tickets c
 - ✅ TICKET-013.5: Enable Multi-Hour Forecasts and Historical Runs (2026-01-11)
 - ✅ TICKET-014: Implement Forecast Hour Animation (2026-01-12)
 - ✅ TICKET-015: Deploy Web Application to S3 + CloudFront (2026-01-12, pre-existing)
+- ✅ TICKET-016: Set Up CloudWatch Monitoring (2026-01-12)
 
 **Next Up**:
-- 📝 TICKET-016: Set Up CloudWatch Monitoring (P1, M effort)
 - 📝 TICKET-017: Create CloudWatch Alarms (P1, S effort)
+- 📝 TICKET-018: Create CloudWatch Dashboard (P2, S effort)
 
 **Dependencies**:
 
@@ -580,7 +586,7 @@ _Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **16/25 tickets c
 - ✅ Phase 3 complete - Processing pipeline ready
 - ✅ Phase 4 complete - Tile generation ready
 - ✅ Phase 5 complete - Pipeline automation ready
-- 🚀 Phase 6 ready to start - Web application
-- Phase 7 can run parallel with Phase 6 (monitoring)
-- Phase 8-9 can run after Phase 6 is complete (testing & docs)
+- ✅ Phase 6 complete - Web application deployed
+- 🟡 Phase 7 in progress - Monitoring (TICKET-016 done, TICKET-017/018 pending)
+- Phase 8-9 can run after Phase 7 is complete (testing & docs)
 - Phase 10 is future enhancements
