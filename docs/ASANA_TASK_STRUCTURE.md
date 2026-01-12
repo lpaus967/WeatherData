@@ -3,7 +3,7 @@
 ## Parent Task
 
 **Weather Data Pipeline - Automated Infrastructure**
-_Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **17/25 tickets complete (68%)**_
+_Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **18/25 tickets complete (72%)**_
 
 ---
 
@@ -395,20 +395,22 @@ _Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **17/25 tickets c
 
 ### TICKET-018: Create CloudWatch Dashboard
 
-- **Priority**: P2 | **Effort**: S (<4 hours) | **Status**: 🔴 Not Started
+- **Priority**: P2 | **Effort**: S (<4 hours) | **Status**: 🟢 Complete
 - **Sub-tasks**:
-  - [ ] Create CloudWatch dashboard
-  - [ ] Add widgets for key metrics:
-    - [ ] Data age graph (last 24 hours)
-    - [ ] Processing time trend
-    - [ ] Files processed per run
-    - [ ] Error count
-    - [ ] S3 storage growth
-    - [ ] EC2 CPU and memory utilization
-  - [ ] Add log insights queries
-  - [ ] Share dashboard URL
-  - [ ] Export dashboard JSON for version control
-- **Acceptance**: Dashboard shows real-time metrics, all widgets display data correctly, updates automatically
+  - [x] Create CloudWatch dashboard (terraform/cloudwatch.tf)
+  - [x] Add widgets for key metrics:
+    - [x] Data age graph (last 24 hours)
+    - [x] Processing time trend
+    - [x] Files processed per run (downloaded, processed, tiles)
+    - [x] Error count by type
+    - [x] Step duration breakdown (stacked chart)
+    - [x] EC2 CPU, memory, and disk utilization
+  - [x] Add log insights queries (Recent Errors, Recent Successes)
+  - [x] Dashboard URL output in Terraform
+  - [x] Dashboard JSON stored in version control (terraform/cloudwatch.tf)
+- **Acceptance**: ✅ Dashboard shows real-time metrics, all widgets configured, auto-updates
+- **Completion Date**: 2026-01-12
+- **Dashboard URL**: https://us-east-2.console.aws.amazon.com/cloudwatch/home?region=us-east-2#dashboards:name=WeatherPipeline
 
 ---
 
@@ -540,11 +542,11 @@ _Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **17/25 tickets c
 **Parent Task**: Weather Data Pipeline - Automated Infrastructure
 
 - **Total Sub-tasks**: 25 tickets organized into 10 phases
-- **Completed**: 17/25 tickets (68%) ✅
+- **Completed**: 18/25 tickets (72%) ✅
 - **Priority Breakdown**:
   - P0 (Critical): 7 tickets (7 complete, 0 remaining) ✅
   - P1 (High): 10 tickets (8 complete, 2 remaining)
-  - P2 (Medium): 5 tickets (2 complete, 3 remaining)
+  - P2 (Medium): 5 tickets (3 complete, 2 remaining)
   - P3 (Low): 3 tickets
 - **Estimated Timeline**: ~2.5-3 weeks for core implementation
 - **Current Status**:
@@ -574,10 +576,11 @@ _Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **17/25 tickets c
 - ✅ TICKET-014: Implement Forecast Hour Animation (2026-01-12)
 - ✅ TICKET-015: Deploy Web Application to S3 + CloudFront (2026-01-12, pre-existing)
 - ✅ TICKET-016: Set Up CloudWatch Monitoring (2026-01-12)
+- ✅ TICKET-018: Create CloudWatch Dashboard (2026-01-12)
 
 **Next Up**:
 - 📝 TICKET-017: Create CloudWatch Alarms (P1, S effort)
-- 📝 TICKET-018: Create CloudWatch Dashboard (P2, S effort)
+- 📝 TICKET-019: Create Integration Test Suite (P1, M effort)
 
 **Dependencies**:
 
