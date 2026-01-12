@@ -32,6 +32,7 @@ DRY_RUN="${DRY_RUN:-false}"
 PRIORITY="${PRIORITY:-1}"
 ZOOM_LEVELS="${ZOOM_LEVELS:-0-8}"
 TILE_PROCESSES="${TILE_PROCESSES:-4}"
+FORECAST_HOURS="${FORECAST_HOURS:-0-6}"  # Forecast hours to download (e.g., "0-6", "0-12", "0,3,6")
 
 # Timestamps
 START_TIME=$(date +%s)
@@ -177,7 +178,7 @@ download_data() {
         python3 /app/scripts/hrrr/download_hrrr.py \
         --date $MODEL_DATE \
         --cycle $MODEL_CYCLE \
-        --fxx 0 \
+        --fxx $FORECAST_HOURS \
         --variables all \
         --output /data/output \
         --keep-local"
@@ -187,16 +188,21 @@ download_data() {
     if $cmd >> "$LOG_FILE" 2>&1; then
         log_success "Download completed"
 
-        # Find downloaded file
-        GRIB2_FILE=$(find "$download_dir" -name "*.grib2" | head -1)
-        if [[ -z "$GRIB2_FILE" ]]; then
-            log_error "No GRIB2 file found after download"
+        # Find all downloaded GRIB files
+        GRIB2_FILES=($(find "$download_dir" -name "*.grib2" | sort))
+        if [[ ${#GRIB2_FILES[@]} -eq 0 ]]; then
+            log_error "No GRIB2 files found after download"
             return 1
         fi
 
-        local file_size=$(du -h "$GRIB2_FILE" | cut -f1)
-        log_info "Downloaded: $(basename $GRIB2_FILE) ($file_size)"
-        export GRIB2_FILE
+        log_info "Downloaded ${#GRIB2_FILES[@]} GRIB2 files:"
+        for f in "${GRIB2_FILES[@]}"; do
+            local file_size=$(du -h "$f" | cut -f1)
+            log_info "  - $(basename $f) ($file_size)"
+        done
+
+        export GRIB2_FILES
+        export DOWNLOAD_DIR="$download_dir"
         return 0
     else
         log_error "Download failed"
@@ -212,38 +218,49 @@ process_grib2() {
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY-RUN] Would process GRIB2 to COGs"
-        # Create dummy files
-        touch "$processed_dir/temperature_2m_hrrr.${MODEL_DATE}.t${MODEL_CYCLE}z.f00.tif"
-        touch "$processed_dir/wind_u_10m_hrrr.${MODEL_DATE}.t${MODEL_CYCLE}z.f00.tif"
+        # Create dummy files for multiple forecast hours
+        for fxx in 00 01 02 03 04 05 06; do
+            touch "$processed_dir/temperature_2m_hrrr.${MODEL_DATE}.t${MODEL_CYCLE}z.f${fxx}.tif"
+            touch "$processed_dir/wind_u_10m_hrrr.${MODEL_DATE}.t${MODEL_CYCLE}z.f${fxx}.tif"
+        done
         return 0
     fi
 
-    local cmd="docker run --rm \
-        --user $(id -u):$(id -g) \
-        -e HOME=/tmp \
-        -v $WORK_DIR/downloads:/data/input \
-        -v $processed_dir:/data/output \
-        -v $PROJECT_ROOT:/app \
-        weather-processor:latest \
-        python3 /app/scripts/processing/process_weather.py \
-        --input /data/input/$(basename $GRIB2_FILE) \
-        --output /data/output \
-        --priority $PRIORITY"
+    # Process each GRIB file
+    local processed_count=0
+    local total_files=${#GRIB2_FILES[@]}
 
-    log_info "Executing: $cmd"
+    for grib_file in "${GRIB2_FILES[@]}"; do
+        local grib_name=$(basename "$grib_file")
+        processed_count=$((processed_count + 1))
+        log_info "Processing GRIB file $processed_count/$total_files: $grib_name"
 
-    if $cmd >> "$LOG_FILE" 2>&1; then
-        log_success "GRIB2 processing completed"
+        local cmd="docker run --rm \
+            --user $(id -u):$(id -g) \
+            -e HOME=/tmp \
+            -v $DOWNLOAD_DIR:/data/input \
+            -v $processed_dir:/data/output \
+            -v $PROJECT_ROOT:/app \
+            weather-processor:latest \
+            python3 /app/scripts/processing/process_weather.py \
+            --input /data/input/$grib_name \
+            --output /data/output \
+            --priority $PRIORITY"
 
-        # Count processed files
-        local cog_count=$(find "$processed_dir" -name "*.tif" | wc -l)
-        log_info "Generated $cog_count COG files"
-        export PROCESSED_DIR="$processed_dir"
-        return 0
-    else
-        log_error "GRIB2 processing failed"
-        return 1
-    fi
+        if $cmd >> "$LOG_FILE" 2>&1; then
+            log_info "  Processed: $grib_name"
+        else
+            log_warn "  Failed to process: $grib_name (continuing with remaining files)"
+        fi
+    done
+
+    log_success "GRIB2 processing completed"
+
+    # Count processed files
+    local cog_count=$(find "$processed_dir" -name "*.tif" | wc -l)
+    log_info "Generated $cog_count COG files from $total_files GRIB files"
+    export PROCESSED_DIR="$processed_dir"
+    return 0
 }
 
 apply_colormaps() {
@@ -504,6 +521,7 @@ OPTIONS:
   --dry-run           Simulate pipeline without executing commands
   --priority N        Processing priority (1-3, default: 1)
   --zoom LEVELS       Zoom levels for tiles (default: 0-8)
+  --forecast-hours H  Forecast hours to download (default: 0-6, e.g., "0-12", "0,3,6")
   --enable-s3         Enable S3 upload
   --s3-bucket NAME    S3 bucket for uploads
   --disable-tiles     Disable tile generation
@@ -518,11 +536,14 @@ EXAMPLES:
   # Run with S3 upload
   $0 --enable-s3 --s3-bucket my-weather-bucket
 
+  # Run with extended forecast hours (F00-F12)
+  $0 --forecast-hours 0-12 --enable-s3 --s3-bucket my-bucket
+
   # Run without tile generation
   $0 --disable-tiles
 
   # Custom configuration
-  $0 --priority 1 --zoom 0-10 --enable-s3 --s3-bucket my-bucket
+  $0 --priority 1 --zoom 0-10 --forecast-hours 0-6 --enable-s3 --s3-bucket my-bucket
 
 ENVIRONMENT VARIABLES:
   WORK_DIR            Working directory for temporary files
@@ -532,6 +553,7 @@ ENVIRONMENT VARIABLES:
   ENABLE_TILES        Enable tile generation (true/false)
   PRIORITY            Processing priority (1-3)
   ZOOM_LEVELS         Zoom levels for tile generation
+  FORECAST_HOURS      Forecast hours to download (e.g., "0-6", "0-12")
   DRY_RUN             Dry run mode (true/false)
 
 EOF
@@ -555,6 +577,10 @@ main() {
                 ;;
             --zoom)
                 ZOOM_LEVELS="$2"
+                shift 2
+                ;;
+            --forecast-hours)
+                FORECAST_HOURS="$2"
                 shift 2
                 ;;
             --enable-s3)
@@ -602,6 +628,7 @@ main() {
     log_info "Time: $(date -u +%H:%M:%S) UTC"
     log_info "Dry Run: $DRY_RUN"
     log_info "Priority: $PRIORITY"
+    log_info "Forecast Hours: $FORECAST_HOURS"
     log_info "Tiles Enabled: $ENABLE_TILES"
     log_info "Zoom Levels: $ZOOM_LEVELS"
     log_info "S3 Upload: $ENABLE_S3_UPLOAD"

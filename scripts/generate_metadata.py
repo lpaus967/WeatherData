@@ -93,6 +93,51 @@ def get_available_variables(tiles_dir: str, config: dict) -> list:
     return variables
 
 
+def get_available_runs(tiles_dir: str) -> list:
+    """
+    Scan tiles directory for all available model runs (timestamps).
+
+    Returns list of run objects with timestamp and forecast hours.
+    Structure: tiles/{variable}/{timestamp}/{forecast}/{z}/{x}/{y}.png
+    """
+    tiles_path = Path(tiles_dir)
+    runs = {}  # {timestamp: set(forecast_hours)}
+
+    if not tiles_path.exists():
+        return []
+
+    # Scan all variable directories
+    for var_dir in tiles_path.iterdir():
+        if not var_dir.is_dir() or var_dir.name.startswith('.'):
+            continue
+
+        # Scan all timestamp directories
+        for ts_dir in var_dir.iterdir():
+            if not ts_dir.is_dir() or ts_dir.name.startswith('.'):
+                continue
+
+            timestamp = ts_dir.name
+            if timestamp not in runs:
+                runs[timestamp] = set()
+
+            # Scan forecast hour directories
+            for fxx_dir in ts_dir.iterdir():
+                if fxx_dir.is_dir() and fxx_dir.name.isdigit():
+                    runs[timestamp].add(fxx_dir.name)
+
+    # Convert to sorted list of run objects
+    available_runs = []
+    for timestamp in sorted(runs.keys(), reverse=True):  # Newest first
+        forecast_hours = sorted(runs[timestamp])
+        available_runs.append({
+            'timestamp': timestamp,
+            'forecast_hours': forecast_hours,
+            'forecast_count': len(forecast_hours)
+        })
+
+    return available_runs
+
+
 def get_forecast_hours(tiles_dir: str, variable: str = None) -> list:
     """Get available forecast hours from tiles directory."""
     forecast_hours = set()
@@ -193,8 +238,11 @@ def generate_metadata(
     # Get available variables
     variables = get_available_variables(tiles_dir, config)
 
-    # Get forecast hours
+    # Get forecast hours for current run
     forecast_hours = get_forecast_hours(tiles_dir)
+
+    # Get all available model runs (for historical data)
+    available_runs = get_available_runs(tiles_dir)
 
     # Calculate data age
     data_age_minutes = calculate_data_age(model_run)
@@ -224,6 +272,10 @@ def generate_metadata(
         'variable_ids': [v['id'] for v in variables],
 
         'forecast_hours': forecast_hours,
+
+        # Historical model runs (for animation/time navigation)
+        'available_runs': available_runs,
+        'available_runs_count': len(available_runs),
 
         'tiles': {
             'url_template': tile_url_template,
@@ -332,6 +384,7 @@ def main():
     # Log summary
     logger.info(f"Variables found: {len(metadata['variables'])}")
     logger.info(f"Forecast hours: {metadata['forecast_hours']}")
+    logger.info(f"Available model runs: {metadata['available_runs_count']}")
     logger.info(f"Data age: {metadata['data_freshness']['age_minutes']} minutes")
 
     # Save metadata
