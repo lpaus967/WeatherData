@@ -129,8 +129,8 @@ variables:
     conversion: "kgm2_to_inches" # kg/m^2 * 0.0393701
     typical_range: [0, 10]
     color_ramp: "precipitation"
-    priority: 1
-    enabled: true
+    priority: 2
+    enabled: false
 
   precipitation_rate:
     grib_search: "PRATE:surface"
