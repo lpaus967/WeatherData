@@ -4,7 +4,10 @@
 resource "aws_s3_bucket_lifecycle_configuration" "weather_data_lifecycle" {
   bucket = aws_s3_bucket.weather_data.id
 
-  # Rule 1: Raw GRIB2 files - Delete after 7 days
+  # Rule 1: Raw GRIB2 files - Safety net deletion after 1 day
+  # Note: The pipeline script (cleanup_old_grib_files) actively removes old GRIB
+  # files after each run, keeping only the most recent model run. This lifecycle
+  # policy acts as a fallback in case cleanup fails.
   rule {
     id     = "expire-raw-grib2"
     status = "Enabled"
