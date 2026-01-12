@@ -97,8 +97,8 @@ variables:
     conversion: "ms_to_mph" # m/s * 2.23694
     typical_range: [0, 100]
     color_ramp: "wind_speed"
-    priority: 1
-    enabled: true
+    priority: 2
+    enabled: false
 
   # ==========================================
   # Moisture Variables (Priority 2)
@@ -157,8 +157,8 @@ variables:
     conversion: null
     typical_range: [0, 100]
     color_ramp: "cloud_cover"
-    priority: 1
-    enabled: true
+    priority: 2
+    enabled: false
 
   cloud_cover_low:
     grib_search: "LCDC:low cloud layer"
@@ -209,8 +209,8 @@ variables:
     conversion: null
     typical_range: [-20, 80]
     color_ramp: "reflectivity"
-    priority: 1
-    enabled: true
+    priority: 2
+    enabled: false
 
   cape:
     grib_search: "CAPE:surface"
@@ -261,8 +261,8 @@ variables:
     conversion: "meters_to_miles" # m * 0.000621371
     typical_range: [0, 20]
     color_ramp: "visibility"
-    priority: 1
-    enabled: true
+    priority: 2
+    enabled: false
 
   snow_depth:
     grib_search: "SNOD:surface"
@@ -273,8 +273,8 @@ variables:
     conversion: "meters_to_inches" # m * 39.3701
     typical_range: [0, 100]
     color_ramp: "snow_depth"
-    priority: 1
-    enabled: true
+    priority: 2
+    enabled: false
 
   snow_cover:
     grib_search: "SNOWC:surface"
@@ -285,8 +285,8 @@ variables:
     conversion: null
     typical_range: [0, 100]
     color_ramp: "snow_cover"
-    priority: 1
-    enabled: true
+    priority: 2
+    enabled: false
 
 # ==========================================
 # Color Ramp Definitions
