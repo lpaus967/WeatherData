@@ -3,7 +3,7 @@
 ## Parent Task
 
 **Weather Data Pipeline - Automated Infrastructure**
-_Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **14/25 tickets complete (56%)**_
+_Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **15/25 tickets complete (60%)**_
 
 ---
 
@@ -318,18 +318,21 @@ _Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **14/25 tickets c
 
 ### TICKET-014: Implement Forecast Hour Animation
 
-- **Priority**: P2 | **Effort**: M (4-8 hours) | **Status**: 🔴 Not Started
+- **Priority**: P2 | **Effort**: M (4-8 hours) | **Status**: 🟢 Complete
 - **Dependencies**: TICKET-013.5 (Multi-Hour Forecasts)
 - **Sub-tasks**:
-  - [ ] Create animation controller class
-  - [ ] Implement play/pause controls
-  - [ ] Add speed control (1x, 2x, 4x)
-  - [ ] Create timeline slider
-  - [ ] Show current forecast validity time
-  - [ ] Preload all forecast hour tiles
-  - [ ] Smooth transitions between forecast hours
-  - [ ] Loop animation option
+  - [x] Create animation controller component (`ForecastAnimationController.tsx`)
+  - [x] Implement play/pause controls (toggle button with visual feedback)
+  - [x] Add speed control (1x, 2x, 4x cycling button)
+  - [x] Create timeline slider (range input with progress visualization)
+  - [x] Show current forecast validity time (calculated from model run + forecast hour)
+  - [x] Preload all forecast hour tiles (`useTilePreloader.ts` hook)
+  - [x] Smooth transitions between forecast hours (via existing `raster-fade-duration`)
+  - [x] Loop animation option (checkbox toggle)
+  - [x] Previous/Next step buttons for manual navigation
 - **Acceptance**: Animation plays smoothly through all forecast hours, can pause at any hour, smooth transitions
+- **Completion Date**: 2026-01-12
+- **Documentation**: See `components/ForecastAnimationController.tsx` and `hooks/useTilePreloader.ts` in webmaps repo
 
 ### TICKET-015: Deploy Web Application to S3 + CloudFront
 
@@ -531,11 +534,11 @@ _Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **14/25 tickets c
 **Parent Task**: Weather Data Pipeline - Automated Infrastructure
 
 - **Total Sub-tasks**: 25 tickets organized into 10 phases
-- **Completed**: 14/25 tickets (56%) ✅
+- **Completed**: 15/25 tickets (60%) ✅
 - **Priority Breakdown**:
   - P0 (Critical): 7 tickets (7 complete, 0 remaining) ✅
   - P1 (High): 10 tickets (6 complete, 4 remaining)
-  - P2 (Medium): 5 tickets (1 complete, 4 remaining)
+  - P2 (Medium): 5 tickets (2 complete, 3 remaining)
   - P3 (Low): 3 tickets
 - **Estimated Timeline**: ~2.5-3 weeks for core implementation
 - **Current Status**:
@@ -544,7 +547,7 @@ _Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **14/25 tickets c
   - ✅ **Phase 3 Complete**: GRIB2 to colored COG processing pipeline working
   - ✅ **Phase 4 Complete**: Tile generation system implemented and optimized
   - ✅ **Phase 5 Complete**: Pipeline orchestration and cron automation ready
-  - 🟡 **Phase 6 In Progress**: Web application (TICKET-013 complete, animation pending)
+  - 🟡 **Phase 6 In Progress**: Web application (TICKET-013, 013.5, 014 complete, deployment pending)
 
 **Completed Tickets**:
 - ✅ TICKET-001: AWS S3 Infrastructure (2026-01-10)
@@ -561,10 +564,11 @@ _Status: In Progress | Priority: P0 | Timeline: ~2.5-3 weeks | **14/25 tickets c
 - ✅ TICKET-012: Create Metadata Generation Script (2026-01-11)
 - ✅ TICKET-013: Create Mapbox Web Application (2026-01-11)
 - ✅ TICKET-013.5: Enable Multi-Hour Forecasts and Historical Runs (2026-01-11)
+- ✅ TICKET-014: Implement Forecast Hour Animation (2026-01-12)
 
 **Next Up**:
-- 📝 TICKET-014: Implement Forecast Hour Animation (P2, M effort) - Prerequisites met!
 - 📝 TICKET-015: Deploy Web Application to S3 + CloudFront (P1, S effort)
+- 📝 TICKET-016: Set Up CloudWatch Monitoring (P1, M effort)
 
 **Dependencies**:
 
