@@ -184,7 +184,7 @@ Examples:
     args = parser.parse_args()
 
     # Validation
-    if args.date and not args.cycle:
+    if args.date and args.cycle is None:
         parser.error('--cycle is required when using --date')
 
     return args
