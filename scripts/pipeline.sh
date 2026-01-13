@@ -30,9 +30,9 @@ ENABLE_S3_UPLOAD="${ENABLE_S3_UPLOAD:-false}"
 ENABLE_TILES="${ENABLE_TILES:-true}"
 DRY_RUN="${DRY_RUN:-false}"
 PRIORITY="${PRIORITY:-1}"
-ZOOM_LEVELS="${ZOOM_LEVELS:-0-8}"
+ZOOM_LEVELS="${ZOOM_LEVELS:-0-6}"
 TILE_PROCESSES="${TILE_PROCESSES:-4}"
-FORECAST_HOURS="${FORECAST_HOURS:-0-6}"  # Forecast hours to download (e.g., "0-6", "0-12", "0,3,6")
+FORECAST_HOURS="${FORECAST_HOURS:-0-12}"  # Forecast hours to download (e.g., "0-6", "0-12", "0,3,6")
 
 # Timestamps
 START_TIME=$(date +%s)
