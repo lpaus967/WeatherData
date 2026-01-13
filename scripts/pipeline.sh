@@ -182,7 +182,7 @@ download_data() {
         weather-processor:latest \
         python3 /app/scripts/hrrr/download_hrrr.py \
         --date $MODEL_DATE \
-        --cycle $MODEL_CYCLE \
+        --cycle=$MODEL_CYCLE \
         --fxx $FORECAST_HOURS \
         --variables all \
         --output /data/output \
@@ -458,7 +458,7 @@ generate_metadata() {
         weather-processor:latest \
         python3 /app/scripts/generate_metadata.py \
         --date $MODEL_DATE \
-        --cycle $MODEL_CYCLE \
+        --cycle=$MODEL_CYCLE \
         --s3-bucket $S3_BUCKET \
         --tiles-dir /data/tiles \
         --config /app/config/variables.yaml \
