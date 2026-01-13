@@ -576,6 +576,128 @@ cleanup_old_grib_files() {
     return 0
 }
 
+cleanup_old_cog_files() {
+    # Clean up old COG files from S3, keeping only the most recent model run
+    # This prevents storage costs from accumulating with colored COGs per hour
+
+    if [[ "$ENABLE_S3_UPLOAD" != "true" ]] || [[ -z "$S3_BUCKET" ]]; then
+        return 0
+    fi
+
+    log_info "Cleaning up old COG files from S3..."
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY-RUN] Would clean up old COG files"
+        return 0
+    fi
+
+    # Current run pattern: colored-cogs/{MODEL_DATE}/ (e.g., colored-cogs/2026-01-11/)
+    local current_date_prefix="colored-cogs/${MODEL_DATE}/"
+
+    # List all date directories in colored-cogs/
+    local cog_prefixes=$(aws s3 ls "s3://$S3_BUCKET/colored-cogs/" 2>/dev/null | awk '{print $2}' || true)
+
+    if [[ -z "$cog_prefixes" ]]; then
+        log_info "No COG directories found to clean up"
+        return 0
+    fi
+
+    local deleted_count=0
+    local kept_count=0
+
+    while IFS= read -r prefix; do
+        if [[ -z "$prefix" ]]; then
+            continue
+        fi
+
+        local full_prefix="colored-cogs/${prefix}"
+
+        # Check if this is the current run's date
+        if [[ "$full_prefix" == "$current_date_prefix" ]]; then
+            kept_count=$((kept_count + 1))
+            log_info "Keeping COG directory: $full_prefix"
+        else
+            # Delete old COG directory
+            log_info "Deleting old COG directory: $full_prefix"
+            if aws s3 rm "s3://$S3_BUCKET/$full_prefix" --recursive --quiet >> "$LOG_FILE" 2>&1; then
+                deleted_count=$((deleted_count + 1))
+            fi
+        fi
+    done <<< "$cog_prefixes"
+
+    log_info "COG cleanup complete: kept $kept_count directories, deleted $deleted_count old directories"
+    return 0
+}
+
+cleanup_old_tiles() {
+    # Clean up old tiles from S3, keeping only the most recent model run
+    # Tiles are organized as: tiles/{variable}/{timestamp}/{forecast}/{z}/{x}/{y}.png
+    # where timestamp is formatted as {MODEL_DATE}T{MODEL_CYCLE}z (e.g., 2026-01-10T19z)
+
+    if [[ "$ENABLE_S3_UPLOAD" != "true" ]] || [[ -z "$S3_BUCKET" ]]; then
+        return 0
+    fi
+
+    if [[ "$ENABLE_TILES" != "true" ]]; then
+        return 0
+    fi
+
+    log_info "Cleaning up old tile files from S3..."
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY-RUN] Would clean up old tile files"
+        return 0
+    fi
+
+    # Current run pattern: {MODEL_DATE}T{MODEL_CYCLE}z (e.g., 2026-01-10T19z)
+    local current_timestamp="${MODEL_DATE}T${MODEL_CYCLE}z"
+
+    # List all variable directories in tiles/
+    local variable_dirs=$(aws s3 ls "s3://$S3_BUCKET/tiles/" 2>/dev/null | awk '{print $2}' || true)
+
+    if [[ -z "$variable_dirs" ]]; then
+        log_info "No tile directories found to clean up"
+        return 0
+    fi
+
+    local deleted_count=0
+    local kept_count=0
+
+    # Iterate through each variable directory
+    while IFS= read -r var_dir; do
+        if [[ -z "$var_dir" ]]; then
+            continue
+        fi
+
+        # List timestamp directories within this variable
+        local timestamp_dirs=$(aws s3 ls "s3://$S3_BUCKET/tiles/${var_dir}" 2>/dev/null | awk '{print $2}' || true)
+
+        while IFS= read -r ts_dir; do
+            if [[ -z "$ts_dir" ]]; then
+                continue
+            fi
+
+            # Remove trailing slash for comparison
+            local ts_name="${ts_dir%/}"
+
+            # Check if this is the current run's timestamp
+            if [[ "$ts_name" == "$current_timestamp" ]]; then
+                kept_count=$((kept_count + 1))
+            else
+                # Delete old timestamp directory
+                local full_path="tiles/${var_dir}${ts_dir}"
+                log_info "Deleting old tiles: $full_path"
+                if aws s3 rm "s3://$S3_BUCKET/$full_path" --recursive --quiet >> "$LOG_FILE" 2>&1; then
+                    deleted_count=$((deleted_count + 1))
+                fi
+            fi
+        done <<< "$timestamp_dirs"
+    done <<< "$variable_dirs"
+
+    log_info "Tiles cleanup complete: kept $kept_count timestamp dirs, deleted $deleted_count old timestamp dirs"
+    return 0
+}
+
 # ============================================================================
 # CloudWatch Metrics Functions (TICKET-016)
 # ============================================================================
@@ -853,8 +975,10 @@ main() {
     upload_to_s3 || exit 1
     generate_metadata || exit 1
 
-    # Clean up old GRIB files to reduce S3 storage costs
+    # Clean up old files to reduce S3 storage costs
     cleanup_old_grib_files
+    cleanup_old_cog_files
+    cleanup_old_tiles
 
     # Send metrics
     send_cloudwatch_metrics
