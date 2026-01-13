@@ -157,8 +157,8 @@ variables:
     conversion: null
     typical_range: [0, 100]
     color_ramp: "cloud_cover"
-    priority: 2
-    enabled: false
+    priority: 1
+    enabled: true
 
   cloud_cover_low:
     grib_search: "LCDC:low cloud layer"
