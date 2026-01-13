@@ -649,8 +649,10 @@ cleanup_old_tiles() {
         return 0
     fi
 
-    # Current run pattern: {MODEL_DATE}T{MODEL_CYCLE}z (e.g., 2026-01-10T19z)
-    local current_timestamp="${MODEL_DATE}T${MODEL_CYCLE}z"
+    # Current run pattern: {date}T{cycle}z (e.g., 20260110T19z)
+    # Note: Tiles use date without dashes (YYYYMMDD format from filename parsing)
+    local current_date="${MODEL_DATE//-/}"  # Remove dashes: 2026-01-10 -> 20260110
+    local current_timestamp="${current_date}T${MODEL_CYCLE}z"
 
     # List all variable directories in tiles/
     local variable_dirs=$(aws s3 ls "s3://$S3_BUCKET/tiles/" 2>/dev/null | awk '{print $2}' || true)
