@@ -301,7 +301,7 @@ variables:
     conversion: null
     typical_range: [0, 1]
     color_ramp: "categorical_precip"
-    priority: 2
+    priority: 1
     enabled: true
 
   categorical_snow:
@@ -313,7 +313,7 @@ variables:
     conversion: null
     typical_range: [0, 1]
     color_ramp: "categorical_precip"
-    priority: 2
+    priority: 1
     enabled: true
 
   categorical_freezing_rain:
@@ -325,7 +325,7 @@ variables:
     conversion: null
     typical_range: [0, 1]
     color_ramp: "categorical_precip"
-    priority: 2
+    priority: 1
     enabled: true
 
   categorical_ice_pellets:
@@ -337,7 +337,7 @@ variables:
     conversion: null
     typical_range: [0, 1]
     color_ramp: "categorical_precip"
-    priority: 2
+    priority: 1
     enabled: true
 
   accumulated_snow:
@@ -349,7 +349,7 @@ variables:
     conversion: "meters_to_inches"
     typical_range: [0, 48]
     color_ramp: "snow_accumulation"
-    priority: 2
+    priority: 1
     enabled: true
 
   # ==========================================
@@ -365,7 +365,7 @@ variables:
     conversion: "kgm3_to_ugm3"
     typical_range: [0, 500]
     color_ramp: "smoke"
-    priority: 2
+    priority: 1
     enabled: true
 
 # ==========================================
