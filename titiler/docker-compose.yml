@@ -1,0 +1,61 @@
+services:
+  titiler:
+    image: ghcr.io/developmentseed/titiler:latest
+    container_name: titiler
+    ports:
+      - "8000:80"
+    environment:
+      # AWS Credentials (loaded from .env file)
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-us-east-2}
+
+      # TiTiler Configuration
+      - TITILER_API_CORS_ORIGINS=${TITILER_API_CORS_ORIGINS:-*}
+
+      # GDAL Configuration for optimal COG performance
+      - GDAL_CACHEMAX=200
+      - GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR
+      - CPL_VSIL_CURL_ALLOWED_EXTENSIONS=.tif,.tiff
+
+      # VSI Cache for S3 reads
+      - VSI_CACHE=TRUE
+      - VSI_CACHE_SIZE=5000000
+
+      # S3 Configuration
+      - AWS_REQUEST_PAYER=requester
+
+      # Uvicorn workers (adjust based on CPU)
+      - WORKERS_PER_CORE=1
+      - MAX_WORKERS=4
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    restart: unless-stopped
+
+    # Resource limits (optional, adjust as needed)
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  # Optional: Redis cache for tile caching
+  # Uncomment to enable local tile caching
+  # redis:
+  #   image: redis:alpine
+  #   container_name: titiler-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   restart: unless-stopped
+
+# volumes:
+#   redis_data:

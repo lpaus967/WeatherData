@@ -1,5 +1,8 @@
 .env
 
+# TiTiler local environment
+titiler/.env
+
 # Old terraform directory with hardcoded credentials - DO NOT COMMIT
 terraform_s3/
 
