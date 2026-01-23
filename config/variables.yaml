@@ -74,7 +74,7 @@ variables:
     typical_range: [-50, 50]
     color_ramp: "wind_component"
     priority: 2
-    enabled: true
+    enabled: false
 
   wind_v_10m:
     grib_search: "VGRD:10 m"
@@ -86,7 +86,7 @@ variables:
     typical_range: [-50, 50]
     color_ramp: "wind_component"
     priority: 2
-    enabled: true
+    enabled: false
 
   wind_gust_surface:
     grib_search: "GUST:surface"
@@ -114,7 +114,7 @@ variables:
     typical_range: [0, 100]
     color_ramp: "humidity"
     priority: 2
-    enabled: true
+    enabled: false
 
   # ==========================================
   # Precipitation Variables (Priority 1)
@@ -158,7 +158,7 @@ variables:
     typical_range: [0, 100]
     color_ramp: "cloud_cover"
     priority: 1
-    enabled: true
+    enabled: false
 
   cloud_cover_low:
     grib_search: "LCDC:low cloud layer"
@@ -170,7 +170,7 @@ variables:
     typical_range: [0, 100]
     color_ramp: "cloud_cover"
     priority: 1
-    enabled: true
+    enabled: false
 
   cloud_cover_mid:
     grib_search: "MCDC:middle cloud layer"
@@ -302,7 +302,7 @@ variables:
     typical_range: [0, 1]
     color_ramp: "categorical_precip"
     priority: 1
-    enabled: true
+    enabled: false
 
   categorical_snow:
     grib_search: "CSNOW:surface"
@@ -326,7 +326,7 @@ variables:
     typical_range: [0, 1]
     color_ramp: "categorical_precip"
     priority: 1
-    enabled: true
+    enabled: false
 
   categorical_ice_pellets:
     grib_search: "CICEP:surface"
@@ -338,7 +338,7 @@ variables:
     typical_range: [0, 1]
     color_ramp: "categorical_precip"
     priority: 1
-    enabled: true
+    enabled: false
 
   accumulated_snow:
     grib_search: "ASNOW:surface"
