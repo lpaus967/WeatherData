@@ -229,9 +229,11 @@ process_grib2() {
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY-RUN] Would process GRIB2 to COGs"
         # Create dummy files for multiple forecast hours
+        # Use YYYYMMDD format (no hyphens) to match real GRIB filenames
+        local model_date_compact="${MODEL_DATE//-/}"
         for fxx in 00 01 02 03 04 05 06; do
-            touch "$processed_dir/temperature_2m_hrrr.${MODEL_DATE}.t${MODEL_CYCLE}z.f${fxx}.tif"
-            touch "$processed_dir/wind_u_10m_hrrr.${MODEL_DATE}.t${MODEL_CYCLE}z.f${fxx}.tif"
+            touch "$processed_dir/temperature_2m_hrrr.${model_date_compact}.t${MODEL_CYCLE}z.f${fxx}.tif"
+            touch "$processed_dir/wind_u_10m_hrrr.${model_date_compact}.t${MODEL_CYCLE}z.f${fxx}.tif"
         done
         FILES_PROCESSED=14
         end_step_timer "Processing"
@@ -294,8 +296,10 @@ apply_colormaps() {
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY-RUN] Would apply color ramps to COGs"
         # Create dummy files
+        # Use YYYYMMDD format (no hyphens) to match real GRIB filenames
+        local model_date_compact="${MODEL_DATE//-/}"
         for fxx in 00 01 02 03 04 05 06; do
-            touch "$colored_dir/temperature_2m_hrrr.${MODEL_DATE}.t${MODEL_CYCLE}z.f${fxx}_colored.tif"
+            touch "$colored_dir/temperature_2m_hrrr.${model_date_compact}.t${MODEL_CYCLE}z.f${fxx}_colored.tif"
         done
         end_step_timer "Colormap"
         return 0
