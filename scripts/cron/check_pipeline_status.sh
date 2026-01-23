@@ -12,7 +12,7 @@ set -euo pipefail
 
 # Configuration
 LOG_DIR="${LOG_DIR:-/var/log/weather-pipeline}"
-S3_BUCKET="${S3_BUCKET:-sat-data-automation-test}"
+S3_BUCKET="${S3_BUCKET:-sat-data-container}"
 MAX_DATA_AGE_HOURS="${MAX_DATA_AGE_HOURS:-4}"
 SNS_TOPIC_ARN="${SNS_TOPIC_ARN:-}"
 ALERT_EMAIL="${ALERT_EMAIL:-}"

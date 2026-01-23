@@ -21,7 +21,7 @@ from botocore.exceptions import ClientError, NoCredentialsError
 
 # CloudWatch configuration
 NAMESPACE = 'WeatherPipeline'
-DEFAULT_REGION = 'us-east-2'
+DEFAULT_REGION = 'us-east-1'
 
 # Metric names
 class MetricNames:

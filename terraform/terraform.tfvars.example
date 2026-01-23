@@ -5,11 +5,11 @@
 # It contains sensitive information like AWS credentials.
 
 # AWS Configuration
-aws_region  = "us-east-2"
-aws_profile = "default" # AWS CLI profile name (recommended)
+aws_region  = "us-east-1"              # Change to your preferred region
+aws_profile = "default"                 # AWS CLI profile name (recommended)
 
 # S3 Configuration
-bucket_name = "sat-data-automation-test" # Must be globally unique
+bucket_name = "your-unique-bucket-name" # Must be globally unique - CHANGE THIS
 environment = "production"
 
 # S3 Lifecycle Policies
