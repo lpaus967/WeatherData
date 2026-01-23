@@ -49,7 +49,7 @@ trap "rm -f $LOCKFILE" EXIT
 # Run the pipeline
 "$PROJECT_ROOT/scripts/pipeline.sh" \
     --enable-s3 \
-    --s3-bucket "${S3_BUCKET:-sat-data-automation-test}" \
+    --s3-bucket "${S3_BUCKET:-sat-data-container}" \
     --priority "${PRIORITY:-1}" \
     --zoom "${ZOOM_LEVELS:-0-8}" \
     --work-dir "${WORK_DIR:-/tmp/weather-pipeline}" \

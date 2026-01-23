@@ -492,7 +492,7 @@ generate_metadata() {
   "variables": [],
   "variable_count": ${variable_count},
   "tiles": {
-    "url_template": "https://${S3_BUCKET}.s3.us-east-2.amazonaws.com/tiles/{variable}/{timestamp}/{forecast}/{z}/{x}/{y}.png",
+    "url_template": "https://${S3_BUCKET}.s3.${AWS_REGION:-us-east-1}.amazonaws.com/tiles/{variable}/{timestamp}/{forecast}/{z}/{x}/{y}.png",
     "format": "png",
     "tile_size": 256
   },

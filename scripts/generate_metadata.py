@@ -249,7 +249,7 @@ def generate_metadata(
 
     # Build base URL
     if not base_url:
-        base_url = f"https://{s3_bucket}.s3.us-east-2.amazonaws.com"
+        base_url = f"https://{s3_bucket}.s3.{os.environ.get('AWS_REGION', 'us-east-1')}.amazonaws.com"
 
     # Build tile URL template
     tile_url_template = f"{base_url}/tiles/{{variable}}/{{timestamp}}/{{forecast}}/{{z}}/{{x}}/{{y}}.png"

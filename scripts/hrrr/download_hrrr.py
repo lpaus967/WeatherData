@@ -25,7 +25,7 @@ import xarray as xr
 
 
 # Configuration
-DEFAULT_S3_BUCKET = "sat-data-automation-test"
+DEFAULT_S3_BUCKET = "sat-data-container"
 DEFAULT_MODEL = "hrrr"
 DEFAULT_PRODUCT = "sfc"  # Surface level product
 TEMP_DIR = Path("/tmp/weather-data")
