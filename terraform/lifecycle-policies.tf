@@ -74,7 +74,28 @@ resource "aws_s3_bucket_lifecycle_configuration" "weather_data_lifecycle" {
     }
   }
 
-  # Rule 4: Metadata files - Never expire, but clean up old versions
+  # Rule 4: Colored COGs - Safety net deletion after 3 days
+  # Note: The pipeline script (cleanup_old_cog_files) actively removes old colored
+  # COGs after each run, keeping only the current date. This lifecycle policy acts
+  # as a fallback in case cleanup fails.
+  rule {
+    id     = "expire-colored-cogs"
+    status = "Enabled"
+
+    filter {
+      prefix = "colored-cogs/"
+    }
+
+    expiration {
+      days = var.tiles_retention_days  # Same retention as tiles (3 days)
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+
+  # Rule 5: Metadata files - Never expire, but clean up old versions
   rule {
     id     = "manage-metadata-versions"
     status = "Enabled"
