@@ -273,8 +273,8 @@ variables:
     conversion: "meters_to_inches" # m * 39.3701
     typical_range: [0, 100]
     color_ramp: "snow_depth"
-    priority: 2
-    enabled: false
+    priority: 1
+    enabled: true
 
   snow_cover:
     grib_search: "SNOWC:surface"
@@ -285,8 +285,8 @@ variables:
     conversion: null
     typical_range: [0, 100]
     color_ramp: "snow_cover"
-    priority: 2
-    enabled: false
+    priority: 1
+    enabled: true
 
   # ==========================================
   # Precipitation Type Variables (Priority 2)
