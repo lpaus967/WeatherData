@@ -8,7 +8,7 @@ and uploads to Mapbox as a raster-array tileset for wind particle visualization.
 Tileset: onwaterllc.hrrr_wind_resampled
 
 Requirements:
-    pip install herbie-data xarray scipy rasterio numpy boto3 mapbox-tilesets
+    pip install herbie-data xarray scipy rasterio numpy boto3 requests
 
 Usage:
     python upload_wind_resampled.py --latest
@@ -266,12 +266,10 @@ def upload_to_mapbox(
     logger: logging.Logger
 ) -> bool:
     """
-    Upload GeoTIFF to Mapbox as a raster-array tileset using Tilesets CLI.
+    Upload GeoTIFF to Mapbox using the Uploads API (for raster tilesets).
     
-    For raster-particle wind layers, we need:
-    1. Upload source with the GeoTIFF
-    2. Create a tileset with raster-array recipe
-    3. Publish the tileset
+    The Uploads API is the correct method for raster/image data.
+    The Tilesets CLI is for vector data (MTS).
     
     Args:
         geotiff_path: Path to the GeoTIFF
@@ -282,118 +280,102 @@ def upload_to_mapbox(
     Returns:
         True if successful
     """
+    import requests
+    import boto3
+    from botocore.config import Config
+    
     if not MAPBOX_TOKEN:
         logger.error("MAPBOX_ACCESS_TOKEN environment variable not set")
         return False
     
-    # Path to tilesets CLI (installed via pipx)
-    tilesets_cmd = os.path.expanduser("~/.local/bin/tilesets")
-    if not os.path.exists(tilesets_cmd):
-        tilesets_cmd = "tilesets"  # Fall back to PATH
-    
     try:
-        source_name = "hrrr-wind-resampled-source"
-        band_timestamp = str(int(valid_time.timestamp()))
+        # Step 1: Get temporary S3 credentials from Mapbox
+        logger.info("Getting Mapbox upload credentials...")
+        creds_url = f"https://api.mapbox.com/uploads/v1/{MAPBOX_USERNAME}/credentials?access_token={MAPBOX_TOKEN}"
+        creds_resp = requests.get(creds_url)
         
-        # Step 1: Upload RASTER source (this replaces existing source)
-        logger.info(f"Uploading raster source: {source_name}")
-        logger.info(f"  File: {geotiff_path}")
-        logger.info(f"  Band timestamp: {band_timestamp}")
-        
-        # Use upload-raster-source for GeoTIFF files (not upload-source which is for GeoJSON)
-        upload_cmd = [
-            tilesets_cmd, 'upload-raster-source',
-            '--replace',  # Replace existing source data
-            '--token', MAPBOX_TOKEN,
-            MAPBOX_USERNAME,
-            source_name,
-            str(geotiff_path)
-        ]
-        
-        logger.debug(f"Running: {' '.join(upload_cmd[:5])}...")
-        result = subprocess.run(upload_cmd, capture_output=True, timeout=300)
-        
-        if result.returncode != 0:
-            logger.error(f"Upload source failed: {safe_decode(result.stderr)}")
-            logger.error(f"stdout: {safe_decode(result.stdout)}")
+        if creds_resp.status_code != 200:
+            logger.error(f"Failed to get credentials: {creds_resp.status_code} - {creds_resp.text}")
             return False
         
-        logger.info(f"Source uploaded: {safe_decode(result.stdout).strip()}")
+        creds = creds_resp.json()
+        logger.info(f"Got credentials for bucket: {creds['bucket']}")
         
-        # Step 2: Create recipe for raster-array tileset
-        recipe = {
-            "version": 1,
-            "layers": {
-                "wind": {
-                    "source": f"mapbox://tileset-source/{MAPBOX_USERNAME}/{source_name}",
-                    "minzoom": 0,
-                    "maxzoom": MAX_ZOOM
-                }
-            }
+        # Step 2: Upload GeoTIFF to Mapbox's S3 staging bucket
+        logger.info(f"Uploading {geotiff_path.name} to S3 staging...")
+        
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=creds['accessKeyId'],
+            aws_secret_access_key=creds['secretAccessKey'],
+            aws_session_token=creds['sessionToken'],
+            region_name='us-east-1',
+            config=Config(signature_version='s3v4')
+        )
+        
+        file_size = geotiff_path.stat().st_size
+        logger.info(f"File size: {file_size / 1024 / 1024:.2f} MB")
+        
+        s3_client.upload_file(
+            str(geotiff_path),
+            creds['bucket'],
+            creds['key'],
+            Callback=lambda bytes_transferred: None  # Could add progress here
+        )
+        
+        logger.info("S3 upload complete")
+        
+        # Step 3: Create the upload job
+        logger.info(f"Creating upload for tileset: {tileset_id}")
+        upload_url = f"https://api.mapbox.com/uploads/v1/{MAPBOX_USERNAME}?access_token={MAPBOX_TOKEN}"
+        
+        upload_data = {
+            'url': creds['url'],
+            'tileset': tileset_id,
+            'name': f'HRRR Wind {valid_time.strftime("%Y-%m-%d %H:%M")} UTC'
         }
         
-        recipe_path = geotiff_path.parent / "recipe.json"
-        with open(recipe_path, 'w') as f:
-            json.dump(recipe, f, indent=2)
+        upload_resp = requests.post(upload_url, json=upload_data)
         
-        logger.info(f"Recipe saved: {recipe_path}")
-        
-        # Step 3: Check if tileset exists
-        status_cmd = [tilesets_cmd, 'status', '--token', MAPBOX_TOKEN, tileset_id]
-        status_result = subprocess.run(status_cmd, capture_output=True)
-        
-        tileset_exists = status_result.returncode == 0 and 'not found' not in safe_decode(status_result.stderr).lower()
-        
-        if not tileset_exists:
-            # Create new tileset
-            logger.info(f"Creating tileset: {tileset_id}")
-            create_cmd = [
-                tilesets_cmd, 'create', tileset_id,
-                '--token', MAPBOX_TOKEN,
-                '--recipe', str(recipe_path),
-                '--name', 'HRRR Wind Resampled 4x',
-                '--description', 'HRRR wind data resampled to 4x resolution for crisp visualization'
-            ]
-            
-            result = subprocess.run(create_cmd, capture_output=True)
-            if result.returncode != 0:
-                logger.error(f"Create tileset failed: {safe_decode(result.stderr)}")
-                return False
-            logger.info(f"Tileset created: {safe_decode(result.stdout).strip()}")
-        else:
-            # Update existing tileset recipe
-            logger.info(f"Updating tileset recipe: {tileset_id}")
-            update_cmd = [
-                tilesets_cmd, 'update-recipe', tileset_id,
-                '--token', MAPBOX_TOKEN,
-                '--recipe', str(recipe_path)
-            ]
-            result = subprocess.run(update_cmd, capture_output=True)
-            if result.returncode != 0:
-                logger.warning(f"Update recipe warning: {safe_decode(result.stderr)}")
-        
-        # Step 4: Publish tileset
-        logger.info(f"Publishing tileset: {tileset_id}")
-        publish_cmd = [tilesets_cmd, 'publish', '--token', MAPBOX_TOKEN, tileset_id]
-        result = subprocess.run(publish_cmd, capture_output=True, timeout=60)
-        
-        if result.returncode != 0:
-            logger.error(f"Publish failed: {safe_decode(result.stderr)}")
+        if upload_resp.status_code not in [200, 201]:
+            logger.error(f"Failed to create upload: {upload_resp.status_code} - {upload_resp.text}")
             return False
         
-        logger.info(f"Tileset published: {safe_decode(result.stdout).strip()}")
+        upload_info = upload_resp.json()
+        upload_id = upload_info.get('id')
+        logger.info(f"Upload created: {upload_id}")
         
-        # Step 5: Check job status
-        logger.info("Checking publish job status...")
-        job_cmd = [tilesets_cmd, 'job', tileset_id, '--token', MAPBOX_TOKEN]
-        job_result = subprocess.run(job_cmd, capture_output=True)
-        logger.info(f"Job status: {safe_decode(job_result.stdout).strip()}")
+        # Step 4: Poll for completion
+        logger.info("Waiting for processing...")
+        import time
+        status_url = f"https://api.mapbox.com/uploads/v1/{MAPBOX_USERNAME}/{upload_id}?access_token={MAPBOX_TOKEN}"
         
-        return True
+        for attempt in range(60):  # Max 5 minutes
+            time.sleep(5)
+            status_resp = requests.get(status_url)
+            
+            if status_resp.status_code != 200:
+                logger.warning(f"Status check failed: {status_resp.status_code}")
+                continue
+            
+            status = status_resp.json()
+            progress = status.get('progress', 0)
+            complete = status.get('complete', False)
+            error = status.get('error')
+            
+            if error:
+                logger.error(f"Upload failed: {error}")
+                return False
+            
+            if complete:
+                logger.info(f"✓ Upload complete! Tileset: {tileset_id}")
+                return True
+            
+            logger.info(f"Processing: {int(progress * 100)}%")
         
-    except subprocess.TimeoutExpired:
-        logger.error("Command timed out")
+        logger.error("Upload timed out after 5 minutes")
         return False
+        
     except Exception as e:
         logger.error(f"Mapbox upload failed: {e}")
         import traceback
