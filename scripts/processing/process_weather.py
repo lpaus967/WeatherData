@@ -318,7 +318,8 @@ def apply_unit_conversion(
 def reproject_to_web_mercator(
     data_array: xr.DataArray,
     resampling_method: str,
-    logger: logging.Logger
+    logger: logging.Logger,
+    target_resolution_meters: Optional[float] = None
 ) -> xr.DataArray:
     """
     Reproject data to EPSG:3857 (Web Mercator).
@@ -327,22 +328,37 @@ def reproject_to_web_mercator(
         data_array: Input data
         resampling_method: GDAL resampling method
         logger: Logger instance
+        target_resolution_meters: Optional output resolution in meters per pixel
+            (EPSG:3857). Use to upsample coarse data for smoother display; omit
+            to keep native resolution.
 
     Returns:
         Reprojected data array
     """
     logger.info("Reprojecting to EPSG:3857 (Web Mercator)")
+    if target_resolution_meters is not None:
+        logger.info(f"Target resolution: {target_resolution_meters} m/pixel (upsampling)")
 
     # Get current CRS
     current_crs = data_array.rio.crs
     logger.debug(f"Current CRS: {current_crs}")
 
+    resampling_enum = getattr(Resampling, resampling_method.lower(), Resampling.bilinear)
     try:
         # Try rioxarray reprojection first
-        reprojected = data_array.rio.reproject(
-            "EPSG:3857",
-            resampling=getattr(Resampling, resampling_method.lower(), Resampling.bilinear)
-        )
+        if target_resolution_meters is not None:
+            # rioxarray: resolution in destination CRS units (meters for 3857)
+            # y resolution negative (pixel height) for north-up
+            reprojected = data_array.rio.reproject(
+                "EPSG:3857",
+                resampling=resampling_enum,
+                resolution=(target_resolution_meters, -target_resolution_meters)
+            )
+        else:
+            reprojected = data_array.rio.reproject(
+                "EPSG:3857",
+                resampling=resampling_enum
+            )
     except Exception as e:
         logger.warning(f"rioxarray reprojection failed: {e}")
         logger.info("Falling back to GDAL reprojection via temporary file")
@@ -359,12 +375,16 @@ def reproject_to_web_mercator(
             data_array.rio.to_raster(src_path)
 
             # Reproject with gdalwarp
-            warp_options = gdal.WarpOptions(
-                format='GTiff',
-                dstSRS='EPSG:3857',
-                resampleAlg=resampling_method,
-                multithread=True
-            )
+            warp_options_dict = {
+                "format": "GTiff",
+                "dstSRS": "EPSG:3857",
+                "resampleAlg": resampling_method,
+                "multithread": True,
+            }
+            if target_resolution_meters is not None:
+                warp_options_dict["xRes"] = target_resolution_meters
+                warp_options_dict["yRes"] = target_resolution_meters
+            warp_options = gdal.WarpOptions(**warp_options_dict)
 
             gdal.Warp(dst_path, src_path, options=warp_options)
 
@@ -523,11 +543,15 @@ def process_variable(
     # Get processing settings
     processing = config.get_processing_config()
 
-    # Reproject to Web Mercator
+    # Reproject to Web Mercator (optional target resolution for upsampling coarse data)
+    target_res = processing.get('target_resolution_meters')
+    if target_res is not None and target_res <= 0:
+        target_res = None
     data_array = reproject_to_web_mercator(
         data_array,
         processing.get('resampling_method', 'bilinear'),
-        logger
+        logger,
+        target_resolution_meters=target_res
     )
 
     # Generate output filename

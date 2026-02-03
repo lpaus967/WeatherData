@@ -197,6 +197,11 @@ processing:
   # Projection
   target_projection: "EPSG:3857" # Web Mercator for web maps
 
+  # Target resolution in Web Mercator (meters per pixel). Use to upsample coarse
+  # source data (e.g. GFS-Wave 0.25° ~28km) for smoother display. Omit or null
+  # to keep native resolution. Example: 5000 = 5 km pixels (much finer than 28 km).
+  target_resolution_meters: 5000
+
   # Resampling method
   resampling_method: "bilinear"
 
