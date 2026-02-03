@@ -258,9 +258,12 @@ def upload_to_mapbox(
     logger: logging.Logger
 ) -> bool:
     """
-    Upload GeoTIFF to Mapbox as a raster-array tileset source.
+    Upload GeoTIFF to Mapbox as a raster-array tileset using Tilesets CLI.
     
-    Uses the Mapbox Tilesets CLI (tilesets-cli).
+    For raster-particle wind layers, we need:
+    1. Upload source with the GeoTIFF
+    2. Create a tileset with raster-array recipe
+    3. Publish the tileset
     
     Args:
         geotiff_path: Path to the GeoTIFF
@@ -275,41 +278,47 @@ def upload_to_mapbox(
         logger.error("MAPBOX_ACCESS_TOKEN environment variable not set")
         return False
     
+    # Path to tilesets CLI (installed via pipx)
+    tilesets_cmd = os.path.expanduser("~/.local/bin/tilesets")
+    if not os.path.exists(tilesets_cmd):
+        tilesets_cmd = "tilesets"  # Fall back to PATH
+    
     try:
-        # Step 1: Upload to tileset source
-        source_id = f"{tileset_id}-source"
-        band_name = str(int(valid_time.timestamp()))
+        source_name = "hrrr-wind-resampled-source"
+        band_timestamp = str(int(valid_time.timestamp()))
         
-        logger.info(f"Uploading to Mapbox tileset source: {source_id}")
+        # Step 1: Upload source (this replaces existing source)
+        logger.info(f"Uploading source: {source_name}")
+        logger.info(f"  File: {geotiff_path}")
+        logger.info(f"  Band timestamp: {band_timestamp}")
         
-        # Use tilesets CLI
-        cmd = [
-            'tilesets', 'upload-source',
+        upload_cmd = [
+            tilesets_cmd, 'upload-source',
+            '--no-validation',  # Skip validation for raster data
             '--token', MAPBOX_TOKEN,
             MAPBOX_USERNAME,
-            source_id,
+            source_name,
             str(geotiff_path)
         ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        logger.debug(f"Running: {' '.join(upload_cmd[:5])}...")
+        result = subprocess.run(upload_cmd, capture_output=True, text=True, timeout=300)
+        
         if result.returncode != 0:
             logger.error(f"Upload source failed: {result.stderr}")
-            # Try alternative: direct API upload
-            return upload_via_api(geotiff_path, tileset_id, valid_time, logger)
+            logger.error(f"stdout: {result.stdout}")
+            return False
         
-        logger.info("Source uploaded successfully")
+        logger.info(f"Source uploaded: {result.stdout.strip()}")
         
-        # Step 2: Create/update tileset recipe
+        # Step 2: Create recipe for raster-array tileset
         recipe = {
             "version": 1,
             "layers": {
                 "wind": {
-                    "source": f"mapbox://tileset-source/{MAPBOX_USERNAME}/{source_id}",
+                    "source": f"mapbox://tileset-source/{MAPBOX_USERNAME}/{source_name}",
                     "minzoom": 0,
-                    "maxzoom": MAX_ZOOM,
-                    "tiles": {
-                        "layer_size": 2048
-                    }
+                    "maxzoom": MAX_ZOOM
                 }
             }
         }
@@ -318,38 +327,68 @@ def upload_to_mapbox(
         with open(recipe_path, 'w') as f:
             json.dump(recipe, f, indent=2)
         
-        # Check if tileset exists
-        check_cmd = ['tilesets', 'status', '--token', MAPBOX_TOKEN, tileset_id]
-        check_result = subprocess.run(check_cmd, capture_output=True, text=True)
+        logger.info(f"Recipe saved: {recipe_path}")
         
-        if 'not found' in check_result.stderr.lower():
+        # Step 3: Check if tileset exists
+        status_cmd = [tilesets_cmd, 'status', '--token', MAPBOX_TOKEN, tileset_id]
+        status_result = subprocess.run(status_cmd, capture_output=True, text=True)
+        
+        tileset_exists = status_result.returncode == 0 and 'not found' not in status_result.stderr.lower()
+        
+        if not tileset_exists:
             # Create new tileset
-            logger.info(f"Creating new tileset: {tileset_id}")
+            logger.info(f"Creating tileset: {tileset_id}")
             create_cmd = [
-                'tilesets', 'create', tileset_id,
+                tilesets_cmd, 'create', tileset_id,
                 '--token', MAPBOX_TOKEN,
                 '--recipe', str(recipe_path),
-                '--name', 'HRRR Wind Resampled 4x'
+                '--name', 'HRRR Wind Resampled 4x',
+                '--description', 'HRRR wind data resampled to 4x resolution for crisp visualization'
             ]
+            
             result = subprocess.run(create_cmd, capture_output=True, text=True)
             if result.returncode != 0:
                 logger.error(f"Create tileset failed: {result.stderr}")
                 return False
+            logger.info(f"Tileset created: {result.stdout.strip()}")
+        else:
+            # Update existing tileset recipe
+            logger.info(f"Updating tileset recipe: {tileset_id}")
+            update_cmd = [
+                tilesets_cmd, 'update-recipe', tileset_id,
+                '--token', MAPBOX_TOKEN,
+                '--recipe', str(recipe_path)
+            ]
+            result = subprocess.run(update_cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                logger.warning(f"Update recipe warning: {result.stderr}")
         
-        # Step 3: Publish tileset
+        # Step 4: Publish tileset
         logger.info(f"Publishing tileset: {tileset_id}")
-        publish_cmd = ['tilesets', 'publish', '--token', MAPBOX_TOKEN, tileset_id]
-        result = subprocess.run(publish_cmd, capture_output=True, text=True)
+        publish_cmd = [tilesets_cmd, 'publish', '--token', MAPBOX_TOKEN, tileset_id]
+        result = subprocess.run(publish_cmd, capture_output=True, text=True, timeout=60)
         
         if result.returncode != 0:
             logger.error(f"Publish failed: {result.stderr}")
             return False
         
-        logger.info("Tileset published successfully!")
+        logger.info(f"Tileset published: {result.stdout.strip()}")
+        
+        # Step 5: Check job status
+        logger.info("Checking publish job status...")
+        job_cmd = [tilesets_cmd, 'job', tileset_id, '--token', MAPBOX_TOKEN]
+        job_result = subprocess.run(job_cmd, capture_output=True, text=True)
+        logger.info(f"Job status: {job_result.stdout.strip()}")
+        
         return True
         
+    except subprocess.TimeoutExpired:
+        logger.error("Command timed out")
+        return False
     except Exception as e:
         logger.error(f"Mapbox upload failed: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
