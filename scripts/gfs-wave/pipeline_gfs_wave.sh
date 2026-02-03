@@ -167,8 +167,8 @@ calculate_model_run_time() {
         local hour=$(date -u -d "@$delayed_epoch" +%H)
     fi
 
-    # Round down to nearest 6-hour cycle
-    MODEL_CYCLE=$(( (hour / 6) * 6 ))
+    # Round down to nearest 6-hour cycle (10# forces base-10 interpretation)
+    MODEL_CYCLE=$(( (10#$hour / 6) * 6 ))
     MODEL_CYCLE=$(printf "%02d" $MODEL_CYCLE)
 
     log_info "Model run: ${MODEL_DATE} cycle ${MODEL_CYCLE}Z"
