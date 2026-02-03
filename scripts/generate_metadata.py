@@ -223,7 +223,8 @@ def generate_metadata(
     tiles_dir: str,
     colored_cogs_dir: str = None,
     config_path: str = None,
-    base_url: str = None
+    base_url: str = None,
+    s3_prefix: str = None
 ) -> dict:
     """Generate complete metadata JSON."""
 
@@ -251,8 +252,9 @@ def generate_metadata(
     if not base_url:
         base_url = f"https://{s3_bucket}.s3.{os.environ.get('AWS_REGION', 'us-east-1')}.amazonaws.com"
 
-    # Build tile URL template
-    tile_url_template = f"{base_url}/tiles/{{variable}}/{{timestamp}}/{{forecast}}/{{z}}/{{x}}/{{y}}.png"
+    # Build tile URL template (use s3_prefix if provided, otherwise default to 'tiles')
+    tiles_path = f"{s3_prefix}/tiles" if s3_prefix else "tiles"
+    tile_url_template = f"{base_url}/{tiles_path}/{{variable}}/{{timestamp}}/{{forecast}}/{{z}}/{{x}}/{{y}}.png"
 
     # Generate metadata
     metadata = {
@@ -287,9 +289,9 @@ def generate_metadata(
         },
 
         'endpoints': {
-            'metadata': f"{base_url}/metadata/latest.json",
-            'tiles': f"{base_url}/tiles/",
-            'colored_cogs': f"{base_url}/colored-cogs/",
+            'metadata': f"{base_url}/{s3_prefix + '/metadata' if s3_prefix else 'metadata'}/latest.json",
+            'tiles': f"{base_url}/{tiles_path}/",
+            'colored_cogs': f"{base_url}/{s3_prefix + '/colored-cogs' if s3_prefix else 'colored-cogs'}/",
         },
 
         'generated_at': datetime.now(timezone.utc).isoformat(),
@@ -354,6 +356,10 @@ def main():
         help='Override base URL for tile endpoints'
     )
     parser.add_argument(
+        '--s3-prefix',
+        help='S3 prefix for model-specific paths (e.g., "gfs-wave" for gfs-wave/tiles/)'
+    )
+    parser.add_argument(
         '--verbose', '-v',
         action='store_true',
         help='Enable verbose logging'
@@ -378,7 +384,8 @@ def main():
         s3_bucket=args.s3_bucket,
         tiles_dir=args.tiles_dir,
         config_path=args.config,
-        base_url=args.base_url
+        base_url=args.base_url,
+        s3_prefix=args.s3_prefix
     )
 
     # Log summary
