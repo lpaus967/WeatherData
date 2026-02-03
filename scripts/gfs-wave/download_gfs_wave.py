@@ -126,8 +126,8 @@ Examples:
     parser.add_argument(
         '--fxx',
         type=str,
-        default='0-12',
-        help='Forecast hours to download (e.g., "0-12", "0,6,12", "0-6,12"). Default: 0-12'
+        default='0',
+        help='Forecast hours to download (e.g., "0", "0-12", "0,6,12"). Default: 0 (current only)'
     )
 
     parser.add_argument(
