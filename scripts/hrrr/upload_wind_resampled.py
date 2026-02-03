@@ -287,14 +287,15 @@ def upload_to_mapbox(
         source_name = "hrrr-wind-resampled-source"
         band_timestamp = str(int(valid_time.timestamp()))
         
-        # Step 1: Upload source (this replaces existing source)
-        logger.info(f"Uploading source: {source_name}")
+        # Step 1: Upload RASTER source (this replaces existing source)
+        logger.info(f"Uploading raster source: {source_name}")
         logger.info(f"  File: {geotiff_path}")
         logger.info(f"  Band timestamp: {band_timestamp}")
         
+        # Use upload-raster-source for GeoTIFF files (not upload-source which is for GeoJSON)
         upload_cmd = [
-            tilesets_cmd, 'upload-source',
-            '--no-validation',  # Skip validation for raster data
+            tilesets_cmd, 'upload-raster-source',
+            '--replace',  # Replace existing source data
             '--token', MAPBOX_TOKEN,
             MAPBOX_USERNAME,
             source_name,
