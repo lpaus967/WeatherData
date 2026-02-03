@@ -147,7 +147,8 @@ def parse_cog_filename(cog_file: Path) -> Optional[Dict[str, str]]:
 
     # Pattern: {variable}_{model}.{date}.{cycle}.{forecast}
     # Example: temperature_2m_hrrr.20260110.t19z.f00
-    pattern = r'^(.+?)_(hrrr|gfs|nam)\.(\d{8})\.t(\d{2}z)\.f(\d{2})$'
+    # Example: wave_height_gfs_wave.20260203.t00z.f000
+    pattern = r'^(.+?)_(hrrr|gfs_wave|gfs|nam)\.(\d{8})\.t(\d{2}z)\.f(\d{2,3})$'
     match = re.match(pattern, name)
 
     if match:
@@ -160,13 +161,14 @@ def parse_cog_filename(cog_file: Path) -> Optional[Dict[str, str]]:
         }
 
     # Fallback: try to extract at least variable name
-    # Pattern: variable_hrrr... or variable_anything
+    # Pattern: variable_hrrr... or variable_gfs...
     parts = name.split('_')
     if len(parts) >= 2:
         # Find where model name starts
+        model_prefixes = ['hrrr', 'gfs', 'nam']
         try:
-            hrrr_idx = next(i for i, p in enumerate(parts) if p.startswith('hrrr'))
-            variable = '_'.join(parts[:hrrr_idx])
+            model_idx = next(i for i, p in enumerate(parts) if any(p.startswith(m) for m in model_prefixes))
+            variable = '_'.join(parts[:model_idx])
             return {
                 'variable': variable,
                 'model': 'unknown',
