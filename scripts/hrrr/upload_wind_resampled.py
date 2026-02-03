@@ -120,6 +120,11 @@ def extract_wind_bands(
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / f"{input_grib.stem}_wind.grib2"
     
+    # Fix PROJ database conflicts (Anaconda vs system GDAL)
+    env = os.environ.copy()
+    env.pop('PROJ_LIB', None)
+    env.pop('PROJ_DATA', None)
+    
     # First, find the correct band numbers for 10m U and V wind
     # Use gdalinfo to inspect the file
     try:
@@ -127,7 +132,8 @@ def extract_wind_bands(
             ['gdalinfo', str(input_grib)],
             capture_output=True,
             text=True,
-            timeout=60
+            timeout=60,
+            env=env
         )
         
         if result.returncode != 0:
@@ -166,7 +172,7 @@ def extract_wind_bands(
             str(output_file)
         ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, env=env)
         
         if result.returncode != 0:
             logger.error(f"gdal_translate failed: {result.stderr}")
@@ -205,6 +211,11 @@ def clip_and_resample_grib(
             '-r', 'bilinear',  # Bilinear resampling for smooth wind fields
         ]
         
+        # Fix PROJ database conflicts (Anaconda vs system GDAL)
+        env = os.environ.copy()
+        env.pop('PROJ_LIB', None)  # Remove Anaconda's PROJ path
+        env.pop('PROJ_DATA', None)
+        
         # Add clipping bounds if region specified
         if region:
             west = region['west'] - region.get('buffer', 0)
@@ -232,7 +243,7 @@ def clip_and_resample_grib(
         cmd.extend([str(input_grib), str(output_file)])
         
         logger.info(f"Running gdalwarp...")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env)
         
         if result.returncode != 0:
             logger.error(f"gdalwarp failed: {result.stderr}")
