@@ -483,6 +483,7 @@ generate_metadata() {
         --s3-bucket $S3_BUCKET \
         --tiles-dir /data/tiles \
         --config /app/config/variables_gfs_wave.yaml \
+        --s3-prefix gfs-wave \
         --output /data/output/latest.json"
 
     log_info "Executing metadata generation..."
