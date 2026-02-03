@@ -1,5 +1,24 @@
 .env
 
+# Python virtual environments
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Test data (large files)
+test-data/
+
+# Temporary files
+/tmp/
+*.tif
+*.grib2
+*.nc
+
 # Old terraform directory with hardcoded credentials - DO NOT COMMIT
 terraform_s3/
 
