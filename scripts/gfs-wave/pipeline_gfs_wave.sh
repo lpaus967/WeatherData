@@ -32,7 +32,7 @@ DRY_RUN="${DRY_RUN:-false}"
 PRIORITY="${PRIORITY:-1}"
 ZOOM_LEVELS="${ZOOM_LEVELS:-0-6}"
 TILE_PROCESSES="${TILE_PROCESSES:-4}"
-FORECAST_HOURS="${FORECAST_HOURS:-0-12}"  # Forecast hours to download
+FORECAST_HOURS="${FORECAST_HOURS:-0}"  # Forecast hours to download (0 = current/analysis only)
 
 # GFS-Wave specific settings
 MODEL_NAME="gfs_wave"
@@ -186,11 +186,9 @@ download_data() {
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY-RUN] Would download GFS-Wave data via Docker"
-        # Create dummy files for dry run
-        for fxx in 000 001 002 003 004 005 006; do
-            touch "$download_dir/gfs_wave.${MODEL_DATE//-/}.t${MODEL_CYCLE}z.f${fxx}.grib2"
-        done
-        FILES_DOWNLOADED=7
+        # Create dummy files for dry run (current time only by default)
+        touch "$download_dir/gfs_wave.${MODEL_DATE//-/}.t${MODEL_CYCLE}z.f000.grib2"
+        FILES_DOWNLOADED=1
         end_step_timer "Download"
         return 0
     fi
@@ -250,13 +248,11 @@ process_grib2() {
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY-RUN] Would process GRIB2 to COGs"
-        # Create dummy files for multiple forecast hours
+        # Create dummy files (current time only by default)
         local model_date_compact="${MODEL_DATE//-/}"
-        for fxx in 000 001 002 003 004 005 006; do
-            touch "$processed_dir/wave_height_gfs_wave.${model_date_compact}.t${MODEL_CYCLE}z.f${fxx}.tif"
-            touch "$processed_dir/wave_period_gfs_wave.${model_date_compact}.t${MODEL_CYCLE}z.f${fxx}.tif"
-        done
-        FILES_PROCESSED=14
+        touch "$processed_dir/wave_height_gfs_wave.${model_date_compact}.t${MODEL_CYCLE}z.f000.tif"
+        touch "$processed_dir/wave_period_gfs_wave.${model_date_compact}.t${MODEL_CYCLE}z.f000.tif"
+        FILES_PROCESSED=2
         end_step_timer "Processing"
         return 0
     fi
@@ -317,11 +313,9 @@ apply_colormaps() {
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY-RUN] Would apply color ramps to COGs"
-        # Create dummy files
+        # Create dummy files (current time only by default)
         local model_date_compact="${MODEL_DATE//-/}"
-        for fxx in 000 001 002 003 004 005 006; do
-            touch "$colored_dir/wave_height_gfs_wave.${model_date_compact}.t${MODEL_CYCLE}z.f${fxx}_colored.tif"
-        done
+        touch "$colored_dir/wave_height_gfs_wave.${model_date_compact}.t${MODEL_CYCLE}z.f000_colored.tif"
         end_step_timer "Colormap"
         return 0
     fi
@@ -369,9 +363,10 @@ generate_tiles() {
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY-RUN] Would generate tiles from colored COGs"
-        mkdir -p "$tiles_dir/wave_height/${MODEL_DATE}T${MODEL_CYCLE}z/000/0/0"
+        local model_date_compact="${MODEL_DATE//-/}"
+        mkdir -p "$tiles_dir/wave_height/${model_date_compact}T${MODEL_CYCLE}z/000/0/0"
         for i in {0..9}; do
-            touch "$tiles_dir/wave_height/${MODEL_DATE}T${MODEL_CYCLE}z/000/0/0/${i}.png"
+            touch "$tiles_dir/wave_height/${model_date_compact}T${MODEL_CYCLE}z/000/0/0/${i}.png"
         done
         TILES_GENERATED=10
         end_step_timer "TileGeneration"
@@ -833,7 +828,7 @@ OPTIONS:
   --dry-run           Simulate pipeline without executing commands
   --priority N        Processing priority (1-3, default: 1)
   --zoom LEVELS       Zoom levels for tiles (default: 0-6)
-  --forecast-hours H  Forecast hours to download (default: 0-12, e.g., "0-12", "0,3,6")
+  --forecast-hours H  Forecast hours to download (default: 0, e.g., "0", "0-12", "0,3,6")
   --enable-s3         Enable S3 upload
   --s3-bucket NAME    S3 bucket for uploads
   --disable-tiles     Disable tile generation
@@ -848,7 +843,7 @@ EXAMPLES:
   # Run with S3 upload
   $0 --enable-s3 --s3-bucket my-weather-bucket
 
-  # Run with extended forecast hours (F00-F12)
+  # Run with extended forecast hours (F000-F012)
   $0 --forecast-hours 0-12 --enable-s3 --s3-bucket my-bucket
 
   # Run without tile generation
@@ -865,7 +860,7 @@ ENVIRONMENT VARIABLES:
   ENABLE_TILES        Enable tile generation (true/false)
   PRIORITY            Processing priority (1-3)
   ZOOM_LEVELS         Zoom levels for tile generation
-  FORECAST_HOURS      Forecast hours to download (e.g., "0-6", "0-12")
+  FORECAST_HOURS      Forecast hours to download (e.g., "0", "0-6", "0-12")
   DRY_RUN             Dry run mode (true/false)
 
 NOTES:
