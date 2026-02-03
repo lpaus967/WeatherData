@@ -251,6 +251,14 @@ def create_wind_geotiff(
         return False
 
 
+def safe_decode(output: bytes) -> str:
+    """Safely decode subprocess output, handling non-UTF-8 bytes."""
+    try:
+        return output.decode('utf-8')
+    except UnicodeDecodeError:
+        return output.decode('utf-8', errors='replace')
+
+
 def upload_to_mapbox(
     geotiff_path: Path,
     tileset_id: str,
@@ -303,14 +311,14 @@ def upload_to_mapbox(
         ]
         
         logger.debug(f"Running: {' '.join(upload_cmd[:5])}...")
-        result = subprocess.run(upload_cmd, capture_output=True, text=True, timeout=300)
+        result = subprocess.run(upload_cmd, capture_output=True, timeout=300)
         
         if result.returncode != 0:
-            logger.error(f"Upload source failed: {result.stderr}")
-            logger.error(f"stdout: {result.stdout}")
+            logger.error(f"Upload source failed: {safe_decode(result.stderr)}")
+            logger.error(f"stdout: {safe_decode(result.stdout)}")
             return False
         
-        logger.info(f"Source uploaded: {result.stdout.strip()}")
+        logger.info(f"Source uploaded: {safe_decode(result.stdout).strip()}")
         
         # Step 2: Create recipe for raster-array tileset
         recipe = {
@@ -332,9 +340,9 @@ def upload_to_mapbox(
         
         # Step 3: Check if tileset exists
         status_cmd = [tilesets_cmd, 'status', '--token', MAPBOX_TOKEN, tileset_id]
-        status_result = subprocess.run(status_cmd, capture_output=True, text=True)
+        status_result = subprocess.run(status_cmd, capture_output=True)
         
-        tileset_exists = status_result.returncode == 0 and 'not found' not in status_result.stderr.lower()
+        tileset_exists = status_result.returncode == 0 and 'not found' not in safe_decode(status_result.stderr).lower()
         
         if not tileset_exists:
             # Create new tileset
@@ -347,11 +355,11 @@ def upload_to_mapbox(
                 '--description', 'HRRR wind data resampled to 4x resolution for crisp visualization'
             ]
             
-            result = subprocess.run(create_cmd, capture_output=True, text=True)
+            result = subprocess.run(create_cmd, capture_output=True)
             if result.returncode != 0:
-                logger.error(f"Create tileset failed: {result.stderr}")
+                logger.error(f"Create tileset failed: {safe_decode(result.stderr)}")
                 return False
-            logger.info(f"Tileset created: {result.stdout.strip()}")
+            logger.info(f"Tileset created: {safe_decode(result.stdout).strip()}")
         else:
             # Update existing tileset recipe
             logger.info(f"Updating tileset recipe: {tileset_id}")
@@ -360,26 +368,26 @@ def upload_to_mapbox(
                 '--token', MAPBOX_TOKEN,
                 '--recipe', str(recipe_path)
             ]
-            result = subprocess.run(update_cmd, capture_output=True, text=True)
+            result = subprocess.run(update_cmd, capture_output=True)
             if result.returncode != 0:
-                logger.warning(f"Update recipe warning: {result.stderr}")
+                logger.warning(f"Update recipe warning: {safe_decode(result.stderr)}")
         
         # Step 4: Publish tileset
         logger.info(f"Publishing tileset: {tileset_id}")
         publish_cmd = [tilesets_cmd, 'publish', '--token', MAPBOX_TOKEN, tileset_id]
-        result = subprocess.run(publish_cmd, capture_output=True, text=True, timeout=60)
+        result = subprocess.run(publish_cmd, capture_output=True, timeout=60)
         
         if result.returncode != 0:
-            logger.error(f"Publish failed: {result.stderr}")
+            logger.error(f"Publish failed: {safe_decode(result.stderr)}")
             return False
         
-        logger.info(f"Tileset published: {result.stdout.strip()}")
+        logger.info(f"Tileset published: {safe_decode(result.stdout).strip()}")
         
         # Step 5: Check job status
         logger.info("Checking publish job status...")
         job_cmd = [tilesets_cmd, 'job', tileset_id, '--token', MAPBOX_TOKEN]
-        job_result = subprocess.run(job_cmd, capture_output=True, text=True)
-        logger.info(f"Job status: {job_result.stdout.strip()}")
+        job_result = subprocess.run(job_cmd, capture_output=True)
+        logger.info(f"Job status: {safe_decode(job_result.stdout).strip()}")
         
         return True
         
