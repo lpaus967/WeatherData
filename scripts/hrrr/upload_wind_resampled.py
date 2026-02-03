@@ -2,17 +2,18 @@
 """
 HRRR Wind Data Resampling and Mapbox Upload Script
 
-Downloads HRRR wind data (U/V components), resamples to 4x resolution,
-and uploads to Mapbox as a raster-array tileset for wind particle visualization.
+Downloads HRRR wind data, resamples to higher resolution, clips to region,
+and uploads to Mapbox as a rasterarray tileset.
 
-Tileset: onwaterllc.hrrr_wind_resampled
+Based on working upload pattern from Wind pipeline.
 
 Requirements:
-    pip install herbie-data xarray scipy rasterio numpy boto3 requests
+    pip install herbie-data xarray scipy numpy requests
 
 Usage:
     python upload_wind_resampled.py --latest
     python upload_wind_resampled.py --date 2026-02-03 --cycle 12
+    python upload_wind_resampled.py --latest --region vermont
 """
 
 import argparse
@@ -22,18 +23,14 @@ import os
 import json
 import subprocess
 import tempfile
+import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Dict, List
 import shutil
+import requests
 
 import numpy as np
-import xarray as xr
-from scipy.ndimage import zoom
-from herbie import Herbie
-import rasterio
-from rasterio.transform import from_bounds
-from rasterio.crs import CRS
 
 # Configuration
 MAPBOX_USERNAME = "onwaterllc"
@@ -41,7 +38,18 @@ TILESET_NAME = "hrrr_wind_resampled"
 TILESET_ID = f"{MAPBOX_USERNAME}.{TILESET_NAME}"
 TEMP_DIR = Path("/tmp/wind-resampled")
 SCALE_FACTOR = 4  # 4x upsampling (~3km -> ~750m)
-MAX_ZOOM = 12  # Higher zoom for resampled data
+
+# Region bounding boxes (WGS84)
+REGIONS = {
+    'vermont': {
+        'west': -73.54,
+        'east': -71.37,
+        'south': 42.63,
+        'north': 45.12,
+        'buffer': 0.1
+    },
+    'conus': None  # Full CONUS, no clipping
+}
 
 # Mapbox access token (use environment variable)
 MAPBOX_TOKEN = os.environ.get("MAPBOX_ACCESS_TOKEN", "")
@@ -66,388 +74,383 @@ def calculate_latest_forecast_time() -> datetime:
     return latest
 
 
-def download_wind_data(
+def download_hrrr_grib(
     date: datetime,
     fxx: int,
     output_dir: Path,
     logger: logging.Logger
-) -> Optional[xr.Dataset]:
+) -> Optional[Path]:
     """
-    Download HRRR wind data (U and V components) using Herbie.
+    Download HRRR GRIB2 file using Herbie.
     
-    Args:
-        date: Forecast initialization datetime
-        fxx: Forecast hour
-        output_dir: Directory for temporary files
-        logger: Logger instance
-    
-    Returns:
-        xarray Dataset with u10 and v10 components, or None if failed
+    Returns path to downloaded GRIB file.
     """
     try:
-        logger.info(f"Downloading HRRR wind data: {date} F{fxx:02d}")
+        from herbie import Herbie
+        
+        logger.info(f"Downloading HRRR GRIB: {date} F{fxx:02d}")
         
         H = Herbie(date, model='hrrr', product='sfc', fxx=fxx)
         
-        # Download U and V wind components at 10m
-        ds_u = H.xarray("UGRD:10 m", remove_grib=False)
-        ds_v = H.xarray("VGRD:10 m", remove_grib=False)
+        # Download the full file (we'll extract wind bands)
+        grib_path = H.download(searchString="UGRD:10 m|VGRD:10 m")
         
-        # Merge into single dataset
-        ds = xr.merge([ds_u, ds_v])
-        
-        logger.info(f"Downloaded wind data: {ds.dims}")
-        return ds
-        
+        if grib_path and Path(grib_path).exists():
+            logger.info(f"Downloaded: {grib_path}")
+            return Path(grib_path)
+        else:
+            logger.error("Download returned no path")
+            return None
+            
     except Exception as e:
-        logger.error(f"Failed to download wind data: {e}")
+        logger.error(f"Failed to download HRRR: {e}")
         return None
 
 
-def resample_wind_data(
-    ds: xr.Dataset,
+def extract_wind_bands(
+    input_grib: Path,
+    output_dir: Path,
+    logger: logging.Logger
+) -> Optional[Path]:
+    """
+    Extract U and V wind bands from HRRR GRIB file.
+    
+    Uses gdal_translate to extract only the 10m wind components.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_file = output_dir / f"{input_grib.stem}_wind.grib2"
+    
+    # First, find the correct band numbers for 10m U and V wind
+    # Use gdalinfo to inspect the file
+    try:
+        result = subprocess.run(
+            ['gdalinfo', str(input_grib)],
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        
+        if result.returncode != 0:
+            logger.error(f"gdalinfo failed: {result.stderr}")
+            return None
+        
+        # Parse output to find U and V wind bands at 10m
+        lines = result.stdout.split('\n')
+        u_band = None
+        v_band = None
+        current_band = None
+        
+        for line in lines:
+            if line.startswith('Band '):
+                current_band = int(line.split()[1])
+            elif 'GRIB_COMMENT=u-component of wind' in line and '10 m' in result.stdout[result.stdout.find(f'Band {current_band}'):result.stdout.find(f'Band {current_band + 1}') if current_band else len(result.stdout)]:
+                u_band = current_band
+            elif 'GRIB_COMMENT=v-component of wind' in line:
+                v_band = current_band
+        
+        # Fallback: use bands 1 and 2 if we downloaded filtered data
+        if u_band is None:
+            u_band = 1
+        if v_band is None:
+            v_band = 2
+            
+        logger.info(f"Extracting bands: U={u_band}, V={v_band}")
+        
+        # Extract the bands
+        cmd = [
+            'gdal_translate',
+            '-of', 'GRIB',
+            '-b', str(u_band),
+            '-b', str(v_band),
+            str(input_grib),
+            str(output_file)
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        
+        if result.returncode != 0:
+            logger.error(f"gdal_translate failed: {result.stderr}")
+            return None
+        
+        logger.info(f"Extracted wind bands: {output_file}")
+        return output_file
+        
+    except Exception as e:
+        logger.error(f"Failed to extract wind bands: {e}")
+        return None
+
+
+def clip_and_resample_grib(
+    input_grib: Path,
+    output_dir: Path,
+    region: Optional[Dict],
     scale_factor: int,
     logger: logging.Logger
-) -> xr.Dataset:
+) -> Optional[Path]:
     """
-    Resample wind data to higher resolution using bilinear interpolation.
+    Clip to region and resample GRIB file to higher resolution.
     
-    Args:
-        ds: Input xarray Dataset with u10 and v10
-        scale_factor: Upsampling factor (e.g., 4 for 4x resolution)
-        logger: Logger instance
-    
-    Returns:
-        Resampled xarray Dataset
+    Uses gdalwarp for reprojection and resampling.
     """
-    logger.info(f"Resampling wind data by {scale_factor}x...")
+    output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Get coordinate names (HRRR uses y/x or latitude/longitude)
-    y_dim = 'y' if 'y' in ds.dims else 'latitude'
-    x_dim = 'x' if 'x' in ds.dims else 'longitude'
+    region_name = "clipped" if region else "full"
+    output_file = output_dir / f"{input_grib.stem}_{region_name}_resampled.grib2"
     
-    # Create new coordinates
-    new_y = np.linspace(
-        ds[y_dim].values[0],
-        ds[y_dim].values[-1],
-        len(ds[y_dim]) * scale_factor
-    )
-    new_x = np.linspace(
-        ds[x_dim].values[0],
-        ds[x_dim].values[-1],
-        len(ds[x_dim]) * scale_factor
-    )
-    
-    # Interpolate using xarray's built-in method
-    ds_resampled = ds.interp(
-        {y_dim: new_y, x_dim: new_x},
-        method='linear'
-    )
-    
-    logger.info(f"Resampled from {ds.dims} to {ds_resampled.dims}")
-    return ds_resampled
-
-
-def create_wind_geotiff(
-    ds: xr.Dataset,
-    output_path: Path,
-    valid_time: datetime,
-    logger: logging.Logger
-) -> bool:
-    """
-    Create a multi-band GeoTIFF with U and V wind components.
-    
-    The GeoTIFF will have 2 bands:
-    - Band 1: U component (east-west wind)
-    - Band 2: V component (north-south wind)
-    
-    Args:
-        ds: xarray Dataset with resampled wind data
-        output_path: Output GeoTIFF path
-        valid_time: Valid time for the forecast
-        logger: Logger instance
-    
-    Returns:
-        True if successful
-    """
     try:
-        # Get variable names (handle different naming conventions)
-        u_var = 'u10' if 'u10' in ds else 'UGRD_10maboveground' if 'UGRD_10maboveground' in ds else list(ds.data_vars)[0]
-        v_var = 'v10' if 'v10' in ds else 'VGRD_10maboveground' if 'VGRD_10maboveground' in ds else list(ds.data_vars)[1]
+        # Build gdalwarp command
+        cmd = [
+            'gdalwarp',
+            '-of', 'GRIB',
+            '-r', 'bilinear',  # Bilinear resampling for smooth wind fields
+        ]
         
-        u_data = ds[u_var].values
-        v_data = ds[v_var].values
+        # Add clipping bounds if region specified
+        if region:
+            west = region['west'] - region.get('buffer', 0)
+            east = region['east'] + region.get('buffer', 0)
+            south = region['south'] - region.get('buffer', 0)
+            north = region['north'] + region.get('buffer', 0)
+            
+            cmd.extend([
+                '-t_srs', 'EPSG:4326',  # Output in WGS84
+                '-te', str(west), str(south), str(east), str(north),
+            ])
+            
+            logger.info(f"Clipping to bounds: [{west}, {south}, {east}, {north}]")
         
-        # Handle 3D arrays (time dimension)
-        if u_data.ndim == 3:
-            u_data = u_data[0]
-            v_data = v_data[0]
+        # Calculate output resolution (scale_factor x finer)
+        # HRRR is ~3km, so 4x gives ~750m
+        # For a regional clip, estimate pixels based on bounds
+        if region:
+            # Roughly 3km = 0.027 degrees at mid-latitudes
+            base_res = 0.027
+            new_res = base_res / scale_factor
+            cmd.extend(['-tr', str(new_res), str(new_res)])
+            logger.info(f"Resampling to {new_res:.4f} degree resolution ({scale_factor}x)")
         
-        # Get coordinate info
-        y_dim = 'y' if 'y' in ds.dims else 'latitude'
-        x_dim = 'x' if 'x' in ds.dims else 'longitude'
+        cmd.extend([str(input_grib), str(output_file)])
         
-        y_coords = ds[y_dim].values
-        x_coords = ds[x_dim].values
+        logger.info(f"Running gdalwarp...")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         
-        # Calculate bounds
-        # HRRR is in Lambert Conformal, but we'll convert to Web Mercator for Mapbox
-        height, width = u_data.shape
+        if result.returncode != 0:
+            logger.error(f"gdalwarp failed: {result.stderr}")
+            return None
         
-        # Create transform
-        transform = from_bounds(
-            x_coords.min(), y_coords.min(),
-            x_coords.max(), y_coords.max(),
-            width, height
-        )
+        logger.info(f"Created resampled GRIB: {output_file}")
+        return output_file
         
-        # Get CRS from dataset or default to Lambert Conformal
+    except Exception as e:
+        logger.error(f"Failed to clip/resample: {e}")
+        return None
+
+
+class MapboxUploader:
+    """Handle Mapbox MTS rasterarray tileset uploads."""
+    
+    def __init__(self, username: str, tileset_name: str, token: str, logger: logging.Logger):
+        self.username = username
+        self.tileset_name = tileset_name
+        self.tileset_id = f"{username}.{tileset_name}"
+        self.token = token
+        self.logger = logger
+    
+    async def delete_tileset_source(self) -> bool:
+        """Delete existing tileset source."""
+        self.logger.info(f"Deleting tileset-source: {self.tileset_id}")
+        url = f"https://api.mapbox.com/tilesets/v1/sources/{self.username}/{self.tileset_name}?access_token={self.token}"
+        
         try:
-            crs = ds.rio.crs
-            if crs is None:
-                # HRRR Lambert Conformal Conic
-                crs = CRS.from_proj4(
-                    "+proj=lcc +lat_0=38.5 +lon_0=-97.5 +lat_1=38.5 +lat_2=38.5 "
-                    "+x_0=0 +y_0=0 +R=6371229 +units=m +no_defs"
-                )
-        except:
-            crs = CRS.from_epsg(4326)  # Fallback to WGS84
-        
-        # Stack U and V into 2 bands
-        wind_data = np.stack([u_data, v_data], axis=0).astype(np.float32)
-        
-        # Write GeoTIFF
-        profile = {
-            'driver': 'GTiff',
-            'dtype': 'float32',
-            'width': width,
-            'height': height,
-            'count': 2,
-            'crs': crs,
-            'transform': transform,
-            'compress': 'deflate',
-            'tiled': True,
-            'blockxsize': 256,
-            'blockysize': 256,
-        }
-        
-        # Add band metadata
-        with rasterio.open(output_path, 'w', **profile) as dst:
-            dst.write(wind_data)
-            dst.set_band_description(1, 'u10')
-            dst.set_band_description(2, 'v10')
-            # Add valid time as tag
-            dst.update_tags(
-                GRIB_VALID_TIME=str(int(valid_time.timestamp()))
-            )
-        
-        logger.info(f"Created GeoTIFF: {output_path} ({width}x{height}, 2 bands)")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Failed to create GeoTIFF: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-
-def safe_decode(output: bytes) -> str:
-    """Safely decode subprocess output, handling non-UTF-8 bytes."""
-    try:
-        return output.decode('utf-8')
-    except UnicodeDecodeError:
-        return output.decode('utf-8', errors='replace')
-
-
-def upload_to_mapbox(
-    geotiff_path: Path,
-    tileset_id: str,
-    valid_time: datetime,
-    logger: logging.Logger
-) -> bool:
-    """
-    Upload GeoTIFF to Mapbox using the Uploads API (for raster tilesets).
-    
-    The Uploads API is the correct method for raster/image data.
-    The Tilesets CLI is for vector data (MTS).
-    
-    Args:
-        geotiff_path: Path to the GeoTIFF
-        tileset_id: Mapbox tileset ID (username.tileset_name)
-        valid_time: Valid time for band naming
-        logger: Logger instance
-    
-    Returns:
-        True if successful
-    """
-    import requests
-    import boto3
-    from botocore.config import Config
-    
-    if not MAPBOX_TOKEN:
-        logger.error("MAPBOX_ACCESS_TOKEN environment variable not set")
-        return False
-    
-    try:
-        # Step 1: Get temporary S3 credentials from Mapbox
-        logger.info("Getting Mapbox upload credentials...")
-        creds_url = f"https://api.mapbox.com/uploads/v1/{MAPBOX_USERNAME}/credentials?access_token={MAPBOX_TOKEN}"
-        creds_resp = requests.get(creds_url)
-        
-        if creds_resp.status_code != 200:
-            logger.error(f"Failed to get credentials: {creds_resp.status_code} - {creds_resp.text}")
-            return False
-        
-        creds = creds_resp.json()
-        logger.info(f"Got credentials for bucket: {creds['bucket']}")
-        
-        # Step 2: Upload GeoTIFF to Mapbox's S3 staging bucket
-        logger.info(f"Uploading {geotiff_path.name} to S3 staging...")
-        
-        s3_client = boto3.client(
-            's3',
-            aws_access_key_id=creds['accessKeyId'],
-            aws_secret_access_key=creds['secretAccessKey'],
-            aws_session_token=creds['sessionToken'],
-            region_name='us-east-1',
-            config=Config(signature_version='s3v4')
-        )
-        
-        file_size = geotiff_path.stat().st_size
-        logger.info(f"File size: {file_size / 1024 / 1024:.2f} MB")
-        
-        s3_client.upload_file(
-            str(geotiff_path),
-            creds['bucket'],
-            creds['key'],
-            Callback=lambda bytes_transferred: None  # Could add progress here
-        )
-        
-        logger.info("S3 upload complete")
-        
-        # Step 3: Create the upload job
-        logger.info(f"Creating upload for tileset: {tileset_id}")
-        upload_url = f"https://api.mapbox.com/uploads/v1/{MAPBOX_USERNAME}?access_token={MAPBOX_TOKEN}"
-        
-        upload_data = {
-            'url': creds['url'],
-            'tileset': tileset_id,
-            'name': f'HRRR Wind {valid_time.strftime("%Y-%m-%d %H:%M")} UTC'
-        }
-        
-        upload_resp = requests.post(upload_url, json=upload_data)
-        
-        if upload_resp.status_code not in [200, 201]:
-            logger.error(f"Failed to create upload: {upload_resp.status_code} - {upload_resp.text}")
-            return False
-        
-        upload_info = upload_resp.json()
-        upload_id = upload_info.get('id')
-        logger.info(f"Upload created: {upload_id}")
-        
-        # Step 4: Poll for completion
-        logger.info("Waiting for processing...")
-        import time
-        status_url = f"https://api.mapbox.com/uploads/v1/{MAPBOX_USERNAME}/{upload_id}?access_token={MAPBOX_TOKEN}"
-        
-        for attempt in range(60):  # Max 5 minutes
-            time.sleep(5)
-            status_resp = requests.get(status_url)
-            
-            if status_resp.status_code != 200:
-                logger.warning(f"Status check failed: {status_resp.status_code}")
-                continue
-            
-            status = status_resp.json()
-            progress = status.get('progress', 0)
-            complete = status.get('complete', False)
-            error = status.get('error')
-            
-            if error:
-                logger.error(f"Upload failed: {error}")
-                return False
-            
-            if complete:
-                logger.info(f"✓ Upload complete! Tileset: {tileset_id}")
+            response = requests.delete(url)
+            if response.ok or response.status_code == 404:
+                self.logger.info("✓ Source deleted (or didn't exist)")
                 return True
+            else:
+                self.logger.error(f"Failed to delete source: {response.status_code} - {response.text}")
+                return False
+        except Exception as e:
+            self.logger.error(f"Error deleting source: {e}")
+            return False
+    
+    async def upload_files_to_source(self, grib_files: List[Path], replace: bool = True) -> bool:
+        """Upload GRIB files to tileset source using multipart upload."""
+        if not grib_files:
+            self.logger.error("No files to upload")
+            return False
+        
+        self.logger.info(f"Uploading {len(grib_files)} file(s) to source...")
+        
+        if replace:
+            if not await self.delete_tileset_source():
+                return False
+            await asyncio.sleep(5)
+        
+        url = f"https://api.mapbox.com/tilesets/v1/sources/{self.username}/{self.tileset_name}?access_token={self.token}"
+        
+        try:
+            files = []
+            file_handles = []
+            for grib_file in grib_files:
+                fh = open(grib_file, 'rb')
+                file_handles.append(fh)
+                files.append(('file', (grib_file.name, fh, 'application/octet-stream')))
             
-            logger.info(f"Processing: {int(progress * 100)}%")
+            response = requests.post(url, files=files)
+            
+            # Close file handles
+            for fh in file_handles:
+                fh.close()
+            
+            if response.ok:
+                self.logger.info(f"✓ Uploaded {len(grib_files)} file(s)")
+                return True
+            else:
+                self.logger.error(f"Upload failed: {response.status_code} - {response.text}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Upload error: {e}")
+            return False
+    
+    def create_recipe(self, output_path: Path) -> Path:
+        """Create Mapbox rasterarray recipe."""
+        recipe = {
+            "version": 1,
+            "type": "rasterarray",
+            "sources": [
+                {"uri": f"mapbox://tileset-source/{self.username}/{self.tileset_name}"}
+            ],
+            "layers": {
+                "wind10m": {
+                    "tilesize": 512,
+                    "resampling": "bilinear",
+                    "minzoom": 0,
+                    "maxzoom": 12,  # Higher zoom for resampled data
+                    "source_rules": {
+                        "name": ["to-number", ["get", "GRIB_VALID_TIME"]],
+                        "sort_key": ["to-number", ["get", "GRIB_VALID_TIME"]],
+                        "order": "asc",
+                        "filter": [
+                            [
+                                "all",
+                                ["==", ["get", "GRIB_COMMENT"], "u-component of wind [m/s]"],
+                                ["==", ["get", "GRIB_SHORT_NAME"], "10-HTGL"]
+                            ],
+                            [
+                                "all",
+                                ["==", ["get", "GRIB_COMMENT"], "v-component of wind [m/s]"],
+                                ["==", ["get", "GRIB_SHORT_NAME"], "10-HTGL"]
+                            ]
+                        ]
+                    }
+                }
+            }
+        }
         
-        logger.error("Upload timed out after 5 minutes")
-        return False
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, 'w') as f:
+            json.dump(recipe, f, indent=2)
         
-    except Exception as e:
-        logger.error(f"Mapbox upload failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+        self.logger.info(f"✓ Created recipe: {output_path}")
+        return output_path
+    
+    async def create_or_update_tileset(self, recipe_path: Path) -> bool:
+        """Create tileset or update its recipe."""
+        # Try to update first
+        update_url = f"https://api.mapbox.com/tilesets/v1/{self.tileset_id}/recipe?access_token={self.token}"
+        
+        with open(recipe_path, 'r') as f:
+            recipe = json.load(f)
+        
+        response = requests.patch(
+            update_url,
+            headers={'Content-Type': 'application/json'},
+            json=recipe
+        )
+        
+        if response.ok:
+            self.logger.info("✓ Recipe updated")
+            return True
+        
+        # Try to create if update failed
+        self.logger.info("Creating new tileset...")
+        create_url = f"https://api.mapbox.com/tilesets/v1/{self.tileset_id}?access_token={self.token}"
+        
+        response = requests.post(
+            create_url,
+            headers={'Content-Type': 'application/json'},
+            json={"recipe": recipe, "name": self.tileset_name}
+        )
+        
+        if response.ok or response.status_code == 409:
+            self.logger.info("✓ Tileset created/exists")
+            return True
+        else:
+            self.logger.error(f"Failed to create tileset: {response.status_code} - {response.text}")
+            return False
+    
+    async def publish(self) -> bool:
+        """Publish the tileset."""
+        self.logger.info(f"Publishing tileset: {self.tileset_id}")
+        url = f"https://api.mapbox.com/tilesets/v1/{self.tileset_id}/publish?access_token={self.token}"
+        
+        response = requests.post(url)
+        
+        if response.ok:
+            self.logger.info("✓ Publish job started")
+            return True
+        else:
+            self.logger.error(f"Publish failed: {response.status_code} - {response.text}")
+            return False
+    
+    async def check_status(self) -> None:
+        """Check tileset job status."""
+        url = f"https://api.mapbox.com/tilesets/v1/{self.tileset_id}/jobs?limit=1&access_token={self.token}"
+        response = requests.get(url)
+        if response.ok:
+            self.logger.info(f"Job status: {response.text}")
 
 
-def upload_via_api(
-    geotiff_path: Path,
-    tileset_id: str,
-    valid_time: datetime,
+async def upload_to_mapbox(
+    grib_files: List[Path],
+    tileset_name: str,
     logger: logging.Logger
 ) -> bool:
     """
-    Alternative upload method using Mapbox API directly.
-    
-    For raster-array tilesets, we need the MTS (Mapbox Tilesets Service) API.
+    Upload processed GRIB files to Mapbox as rasterarray tileset.
     """
-    import requests
-    
-    try:
-        # Step 1: Get upload credentials
-        creds_url = f"https://api.mapbox.com/uploads/v1/{MAPBOX_USERNAME}/credentials?access_token={MAPBOX_TOKEN}"
-        creds_resp = requests.get(creds_url)
-        
-        if creds_resp.status_code != 200:
-            logger.error(f"Failed to get upload credentials: {creds_resp.text}")
-            return False
-        
-        creds = creds_resp.json()
-        
-        # Step 2: Upload to S3 staging
-        import boto3
-        
-        s3_client = boto3.client(
-            's3',
-            aws_access_key_id=creds['accessKeyId'],
-            aws_secret_access_key=creds['secretAccessKey'],
-            aws_session_token=creds['sessionToken'],
-            region_name='us-east-1'
-        )
-        
-        s3_client.upload_file(
-            str(geotiff_path),
-            creds['bucket'],
-            creds['key']
-        )
-        
-        logger.info("Uploaded to Mapbox staging")
-        
-        # Step 3: Create upload
-        upload_url = f"https://api.mapbox.com/uploads/v1/{MAPBOX_USERNAME}?access_token={MAPBOX_TOKEN}"
-        upload_data = {
-            'url': creds['url'],
-            'tileset': tileset_id,
-            'name': 'HRRR Wind Resampled 4x'
-        }
-        
-        upload_resp = requests.post(upload_url, json=upload_data)
-        
-        if upload_resp.status_code not in [200, 201]:
-            logger.error(f"Failed to create upload: {upload_resp.text}")
-            return False
-        
-        upload_info = upload_resp.json()
-        logger.info(f"Upload created: {upload_info.get('id')}")
-        
-        return True
-        
-    except Exception as e:
-        logger.error(f"API upload failed: {e}")
+    if not MAPBOX_TOKEN:
+        logger.error("MAPBOX_ACCESS_TOKEN not set")
         return False
+    
+    uploader = MapboxUploader(MAPBOX_USERNAME, tileset_name, MAPBOX_TOKEN, logger)
+    
+    # Create recipe
+    recipe_path = TEMP_DIR / "recipe.json"
+    uploader.create_recipe(recipe_path)
+    
+    # Upload files
+    if not await uploader.upload_files_to_source(grib_files, replace=True):
+        return False
+    
+    await asyncio.sleep(10)
+    
+    # Create/update tileset
+    if not await uploader.create_or_update_tileset(recipe_path):
+        return False
+    
+    await asyncio.sleep(5)
+    
+    # Publish
+    if not await uploader.publish():
+        return False
+    
+    await asyncio.sleep(10)
+    await uploader.check_status()
+    
+    logger.info(f"\n✓ Tileset available at: mapbox://{MAPBOX_USERNAME}.{tileset_name}")
+    return True
 
 
 def main():
@@ -461,8 +464,10 @@ def main():
     date_group.add_argument('--latest', action='store_true', help='Use latest forecast')
     
     parser.add_argument('--cycle', type=int, help='Model cycle hour (0-23)')
-    parser.add_argument('--fxx', type=str, default='0', help='Forecast hours (e.g., "0-6")')
-    parser.add_argument('--scale', type=int, default=SCALE_FACTOR, help=f'Resample scale factor (default: {SCALE_FACTOR})')
+    parser.add_argument('--fxx', type=str, default='0', help='Forecast hours (e.g., "0-6" or "0,3,6")')
+    parser.add_argument('--scale', type=int, default=SCALE_FACTOR, help=f'Resample scale (default: {SCALE_FACTOR})')
+    parser.add_argument('--region', type=str, choices=list(REGIONS.keys()), default='vermont', help='Region to clip')
+    parser.add_argument('--tileset', type=str, default=TILESET_NAME, help='Mapbox tileset name')
     parser.add_argument('--output-dir', type=Path, default=TEMP_DIR, help='Output directory')
     parser.add_argument('--keep-files', action='store_true', help='Keep intermediate files')
     parser.add_argument('--skip-upload', action='store_true', help='Skip Mapbox upload')
@@ -485,7 +490,8 @@ def main():
         forecast_date = datetime.strptime(f"{args.date} {args.cycle:02d}", "%Y-%m-%d %H")
     
     logger.info(f"Forecast: {forecast_date.strftime('%Y-%m-%d %H:00 UTC')}")
-    logger.info(f"Scale factor: {args.scale}x")
+    logger.info(f"Region: {args.region}")
+    logger.info(f"Scale: {args.scale}x")
     
     # Parse forecast hours
     fxx_list = []
@@ -498,57 +504,55 @@ def main():
     
     logger.info(f"Forecast hours: {fxx_list}")
     
-    # Create output directory
+    # Create directories
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    raw_dir = args.output_dir / "raw"
+    extracted_dir = args.output_dir / "extracted"
+    resampled_dir = args.output_dir / "resampled"
     
-    # Process each forecast hour
-    success_count = 0
+    region = REGIONS.get(args.region)
+    processed_files = []
+    
     for fxx in fxx_list:
         logger.info(f"\n{'=' * 40}")
         logger.info(f"Processing F{fxx:02d}")
         logger.info(f"{'=' * 40}")
         
-        # Calculate valid time
-        valid_time = forecast_date + timedelta(hours=fxx)
-        
-        # Download wind data
-        ds = download_wind_data(forecast_date, fxx, args.output_dir, logger)
-        if ds is None:
+        # Download
+        grib_path = download_hrrr_grib(forecast_date, fxx, raw_dir, logger)
+        if not grib_path:
             continue
         
-        # Resample
-        ds_resampled = resample_wind_data(ds, args.scale, logger)
-        
-        # Create GeoTIFF
-        geotiff_name = f"wind_resampled_{forecast_date.strftime('%Y%m%d_%H')}z_f{fxx:02d}.tif"
-        geotiff_path = args.output_dir / geotiff_name
-        
-        if not create_wind_geotiff(ds_resampled, geotiff_path, valid_time, logger):
+        # Extract wind bands
+        extracted_path = extract_wind_bands(grib_path, extracted_dir, logger)
+        if not extracted_path:
             continue
         
-        # Upload to Mapbox
-        if not args.skip_upload:
-            if upload_to_mapbox(geotiff_path, TILESET_ID, valid_time, logger):
-                success_count += 1
-        else:
-            logger.info("Skipping Mapbox upload (--skip-upload)")
-            success_count += 1
+        # Clip and resample
+        resampled_path = clip_and_resample_grib(
+            extracted_path, resampled_dir, region, args.scale, logger
+        )
+        if resampled_path:
+            processed_files.append(resampled_path)
+    
+    # Upload to Mapbox
+    if processed_files and not args.skip_upload:
+        logger.info(f"\n{'=' * 60}")
+        logger.info("Uploading to Mapbox")
+        logger.info(f"{'=' * 60}")
         
-        # Cleanup
-        if not args.keep_files and geotiff_path.exists():
-            geotiff_path.unlink()
+        success = asyncio.run(upload_to_mapbox(processed_files, args.tileset, logger))
+        
+        if not success:
+            logger.error("Upload failed")
+            return 1
     
-    # Summary
-    logger.info(f"\n{'=' * 60}")
-    logger.info("Summary")
-    logger.info(f"{'=' * 60}")
-    logger.info(f"Processed: {len(fxx_list)} forecast hours")
-    logger.info(f"Successful: {success_count}")
-    
-    if not args.keep_files and args.output_dir.exists():
+    # Cleanup
+    if not args.keep_files:
         shutil.rmtree(args.output_dir, ignore_errors=True)
     
-    return 0 if success_count > 0 else 1
+    logger.info("\n✓ Pipeline complete!")
+    return 0
 
 
 if __name__ == '__main__':
