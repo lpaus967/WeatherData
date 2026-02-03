@@ -297,18 +297,20 @@ def infer_variable_name(cog_file: Path) -> Optional[str]:
     if name.endswith('_colored'):
         name = name[:-8]
 
-    # Common patterns: variable_name_hrrr.YYYYMMDD...
+    # Common patterns: variable_name_hrrr.YYYYMMDD... or variable_name_gfs_wave.YYYYMMDD...
     # Split by underscore
     parts = name.split('_')
 
-    # Look for 'hrrr' in parts (indicates start of timestamp)
+    # Look for model name in parts (indicates start of timestamp)
+    # Support: hrrr, gfs, gfs_wave, etc.
+    model_prefixes = ['hrrr', 'gfs']
     try:
-        hrrr_index = next(i for i, p in enumerate(parts) if p.startswith('hrrr'))
-        # Variable name is everything before hrrr
-        variable_name = '_'.join(parts[:hrrr_index])
+        model_index = next(i for i, p in enumerate(parts) if any(p.startswith(m) for m in model_prefixes))
+        # Variable name is everything before model name
+        variable_name = '_'.join(parts[:model_index])
         return variable_name
     except StopIteration:
-        # No hrrr found, might be a different naming pattern
+        # No model found, might be a different naming pattern
         # Try first two parts joined (e.g., temperature_2m)
         if len(parts) >= 2:
             return '_'.join(parts[:2])
