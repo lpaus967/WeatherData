@@ -265,13 +265,13 @@ def extract_surface_currents(
         # Stack u and v into 2 bands
         data = np.stack([u_values, v_values], axis=0)
         
-        # Write GeoTIFF
+        # Write separate GeoTIFFs for u and v (Mapbox needs separate files for raster-particle)
         profile = {
             'driver': 'GTiff',
             'dtype': 'float32',
             'width': width,
             'height': height,
-            'count': 2,
+            'count': 1,
             'crs': CRS.from_epsg(4326),
             'transform': transform,
             'compress': 'deflate',
@@ -281,14 +281,33 @@ def extract_surface_currents(
             'nodata': np.nan
         }
         
-        with rasterio.open(output_file, 'w', **profile) as dst:
-            dst.write(data)
-            dst.set_band_description(1, 'u_current')
-            dst.set_band_description(2, 'v_current')
-            dst.update_tags(VALID_TIME=str(valid_timestamp))
+        # U component file
+        u_file = output_dir / f"tbofs_current_u_{valid_timestamp}_{forecast_part}.tif"
+        with rasterio.open(u_file, 'w', **profile) as dst:
+            dst.write(u_values, 1)
+            dst.set_band_description(1, 'u-component of current [m/s]')
+            dst.update_tags(
+                GRIB_VALID_TIME=str(valid_timestamp),
+                GRIB_COMMENT='u-component of current [m/s]',
+                GRIB_SHORT_NAME='UCURR'
+            )
         
-        logger.info(f"✓ Created: {output_file.name}")
-        return output_file
+        # V component file
+        v_file = output_dir / f"tbofs_current_v_{valid_timestamp}_{forecast_part}.tif"
+        with rasterio.open(v_file, 'w', **profile) as dst:
+            dst.write(v_values, 1)
+            dst.set_band_description(1, 'v-component of current [m/s]')
+            dst.update_tags(
+                GRIB_VALID_TIME=str(valid_timestamp),
+                GRIB_COMMENT='v-component of current [m/s]',
+                GRIB_SHORT_NAME='VCURR'
+            )
+        
+        logger.info(f"✓ Created: {u_file.name}")
+        logger.info(f"✓ Created: {v_file.name}")
+        
+        # Return u_file path (both files are in same dir)
+        return u_file
         
     except Exception as e:
         logger.error(f"Failed to process {nc_file.name}: {e}")

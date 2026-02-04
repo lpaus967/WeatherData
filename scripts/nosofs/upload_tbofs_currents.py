@@ -127,10 +127,23 @@ class MapboxUploader:
                     "minzoom": 0,
                     "maxzoom": 14,  # High zoom for coastal detail
                     "source_rules": {
-                        # Use VALID_TIME tag from GeoTIFF for band naming
-                        "name": ["get", "VALID_TIME"],
-                        "sort_key": ["to-number", ["get", "VALID_TIME"]],
-                        "order": "asc"
+                        # Use GRIB_VALID_TIME for band naming (like wind layer)
+                        "name": ["to-number", ["get", "GRIB_VALID_TIME"]],
+                        "sort_key": ["to-number", ["get", "GRIB_VALID_TIME"]],
+                        "order": "asc",
+                        # Filter for u and v components (Mapbox combines them for particle viz)
+                        "filter": [
+                            [
+                                "all",
+                                ["==", ["get", "GRIB_COMMENT"], "u-component of current [m/s]"],
+                                ["==", ["get", "GRIB_SHORT_NAME"], "UCURR"]
+                            ],
+                            [
+                                "all",
+                                ["==", ["get", "GRIB_COMMENT"], "v-component of current [m/s]"],
+                                ["==", ["get", "GRIB_SHORT_NAME"], "VCURR"]
+                            ]
+                        ]
                     }
                 }
             }
