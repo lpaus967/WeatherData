@@ -147,17 +147,27 @@ def extract_surface_currents(
             u_surface = u_surface.isel(ocean_time=0)
             v_surface = v_surface.isel(ocean_time=0)
         
-        # Get coordinates
+        # Get coordinates (use rho grid coordinates)
         if 'lon_rho' in ds:
             lon = ds['lon_rho'].values
             lat = ds['lat_rho'].values
+        elif 'lon_psi' in ds:
+            lon = ds['lon_psi'].values
+            lat = ds['lat_psi'].values
         elif 'Longitude' in ds:
             lon = ds['Longitude'].values
             lat = ds['Latitude'].values
         else:
-            logger.error(f"Could not find coordinate variables")
-            ds.close()
-            return None
+            # Try to find any lon/lat variables
+            lon_vars = [v for v in ds.coords if 'lon' in v.lower()]
+            lat_vars = [v for v in ds.coords if 'lat' in v.lower()]
+            if lon_vars and lat_vars:
+                lon = ds[lon_vars[0]].values
+                lat = ds[lat_vars[0]].values
+            else:
+                logger.error(f"Could not find coordinate variables. Available: {list(ds.coords)}")
+                ds.close()
+                return None
         
         # Get data as numpy arrays
         u_values = u_surface.values.astype(np.float32)
@@ -173,12 +183,57 @@ def extract_surface_currents(
         u_values = np.where(np.abs(u_values) > 100, np.nan, u_values)
         v_values = np.where(np.abs(v_values) > 100, np.nan, v_values)
         
+        logger.info(f"U grid shape: {u_values.shape}")
+        logger.info(f"V grid shape: {v_values.shape}")
+        
+        # ROMS uses staggered Arakawa C-grid: u and v are on different grids
+        # Interpolate to common rho grid by averaging adjacent cells
+        if u_values.shape != v_values.shape:
+            logger.info("Interpolating staggered grids to common rho grid...")
+            
+            # u is on xi_u grid (one less in xi direction)
+            # v is on eta_v grid (one less in eta direction)
+            # Interpolate to rho grid
+            
+            if u_values.shape[1] < v_values.shape[1]:
+                # u has fewer columns - interpolate in xi direction
+                u_interp = (u_values[:, :-1] + u_values[:, 1:]) / 2 if u_values.shape[1] > 1 else u_values
+                # Pad to match v shape if needed
+                if u_interp.shape[1] < v_values.shape[1]:
+                    u_interp = np.pad(u_interp, ((0, 0), (0, v_values.shape[1] - u_interp.shape[1])), 
+                                      mode='edge')
+                u_values = u_interp[:v_values.shape[0], :v_values.shape[1]]
+            
+            if v_values.shape[0] < u_values.shape[0]:
+                # v has fewer rows - interpolate in eta direction
+                v_interp = (v_values[:-1, :] + v_values[1:, :]) / 2 if v_values.shape[0] > 1 else v_values
+                # Pad to match u shape if needed
+                if v_interp.shape[0] < u_values.shape[0]:
+                    v_interp = np.pad(v_interp, ((0, u_values.shape[0] - v_interp.shape[0]), (0, 0)), 
+                                      mode='edge')
+                v_values = v_interp[:u_values.shape[0], :u_values.shape[1]]
+            
+            # Final shape matching - take the minimum common shape
+            min_rows = min(u_values.shape[0], v_values.shape[0])
+            min_cols = min(u_values.shape[1], v_values.shape[1])
+            u_values = u_values[:min_rows, :min_cols]
+            v_values = v_values[:min_rows, :min_cols]
+            
+            logger.info(f"Interpolated to common shape: {u_values.shape}")
+        
         logger.info(f"Grid shape: {u_values.shape}")
         logger.info(f"U range: {np.nanmin(u_values):.3f} to {np.nanmax(u_values):.3f} m/s")
         logger.info(f"V range: {np.nanmin(v_values):.3f} to {np.nanmax(v_values):.3f} m/s")
         
+        ds.close()
+        
         # Calculate bounds from coordinate arrays
+        # Trim coordinates to match data shape if needed
         if lon.ndim == 2:
+            if lon.shape != u_values.shape:
+                # Trim to match data grid
+                lon = lon[:u_values.shape[0], :u_values.shape[1]]
+                lat = lat[:u_values.shape[0], :u_values.shape[1]]
             lon_min, lon_max = float(np.nanmin(lon)), float(np.nanmax(lon))
             lat_min, lat_max = float(np.nanmin(lat)), float(np.nanmax(lat))
         else:
@@ -186,8 +241,6 @@ def extract_surface_currents(
             lat_min, lat_max = float(lat.min()), float(lat.max())
         
         logger.info(f"Bounds: [{lon_min:.4f}, {lat_min:.4f}, {lon_max:.4f}, {lat_max:.4f}]")
-        
-        ds.close()
         
         # Create output GeoTIFF
         output_dir.mkdir(parents=True, exist_ok=True)
