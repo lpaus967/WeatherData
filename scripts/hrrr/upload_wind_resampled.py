@@ -40,7 +40,12 @@ TEMP_DIR = Path("/tmp/wind-resampled")
 SCALE_FACTOR = 4  # 4x upsampling (~3km -> ~750m)
 
 # Region bounding boxes (WGS84)
+# Regional tilesets with clean, non-overlapping boundaries for seamless wind particles
 REGIONS = {
+    # Full CONUS - lower res overview
+    'conus': None,
+    
+    # State-level (legacy)
     'vermont': {
         'west': -73.54,
         'east': -71.37,
@@ -48,7 +53,45 @@ REGIONS = {
         'north': 45.12,
         'buffer': 0.1
     },
-    'conus': None  # Full CONUS, no clipping
+    
+    # === Regional tilesets (no overlap, no buffer) ===
+    # Split at 37°N (VA/NC line) and 100°W (Great Plains)
+    
+    'northeast': {
+        'west': -100.0,
+        'east': -67.0,
+        'south': 37.0,
+        'north': 49.0,
+        'buffer': 0  # No buffer - clean seams
+    },
+    'southeast': {
+        'west': -100.0,
+        'east': -67.0,
+        'south': 24.0,
+        'north': 37.0,
+        'buffer': 0
+    },
+    'northwest': {
+        'west': -125.0,
+        'east': -100.0,
+        'south': 37.0,
+        'north': 49.0,
+        'buffer': 0
+    },
+    'southwest': {
+        'west': -115.0,
+        'east': -100.0,
+        'south': 24.0,
+        'north': 37.0,
+        'buffer': 0
+    },
+    'west_coast': {
+        'west': -125.0,
+        'east': -115.0,
+        'south': 24.0,
+        'north': 37.0,
+        'buffer': 0
+    },
 }
 
 # Mapbox access token (use environment variable)
@@ -513,8 +556,10 @@ def main():
     parser.add_argument('--cycle', type=int, help='Model cycle hour (0-23)')
     parser.add_argument('--fxx', type=str, default='0', help='Forecast hours (e.g., "0-6" or "0,3,6")')
     parser.add_argument('--scale', type=int, default=SCALE_FACTOR, help=f'Resample scale (default: {SCALE_FACTOR})')
-    parser.add_argument('--region', type=str, choices=list(REGIONS.keys()), default='vermont', help='Region to clip')
-    parser.add_argument('--tileset', type=str, default=TILESET_NAME, help='Mapbox tileset name')
+    parser.add_argument('--region', type=str, choices=list(REGIONS.keys()) + ['all'], default='northeast', 
+                        help='Region to clip (northeast, southeast, northwest, southwest, west_coast, conus, vermont, or "all" for all 5 regional tilesets)')
+    parser.add_argument('--tileset', type=str, default=None, 
+                        help='Mapbox tileset name (default: hrrr_wind_{region})')
     parser.add_argument('--output-dir', type=Path, default=TEMP_DIR, help='Output directory')
     parser.add_argument('--keep-files', action='store_true', help='Keep intermediate files')
     parser.add_argument('--skip-upload', action='store_true', help='Skip Mapbox upload')
@@ -529,6 +574,47 @@ def main():
     logger.info("HRRR Wind Resampling Pipeline")
     logger.info("=" * 60)
     
+    # Handle --region all (process all 5 regional tilesets)
+    REGIONAL_TILESETS = ['northeast', 'southeast', 'northwest', 'southwest', 'west_coast']
+    
+    if args.region == 'all':
+        logger.info("Processing ALL regional tilesets...")
+        for region in REGIONAL_TILESETS:
+            logger.info(f"\n{'#' * 60}")
+            logger.info(f"# REGION: {region.upper()}")
+            logger.info(f"{'#' * 60}")
+            
+            # Build command for subprocess
+            cmd = [sys.executable, __file__]
+            if args.latest:
+                cmd.append('--latest')
+            else:
+                cmd.extend([f'--date={args.date}', f'--cycle={args.cycle}'])
+            cmd.extend([
+                f'--region={region}',
+                f'--scale={args.scale}',
+                f'--fxx={args.fxx}',
+            ])
+            if args.keep_files:
+                cmd.append('--keep-files')
+            if args.skip_upload:
+                cmd.append('--skip-upload')
+            if args.dynamic_bands:
+                cmd.append('--dynamic-bands')
+            if args.verbose:
+                cmd.append('-v')
+            
+            result = subprocess.run(cmd)
+            if result.returncode != 0:
+                logger.error(f"Failed to process region: {region}")
+        
+        logger.info("\n✓ All regional tilesets processed!")
+        return 0
+    
+    # Set tileset name based on region if not provided
+    if args.tileset is None:
+        args.tileset = f"hrrr_wind_{args.region}"
+    
     # Determine forecast date/time
     if args.latest:
         forecast_date = calculate_latest_forecast_time()
@@ -541,6 +627,7 @@ def main():
     logger.info(f"Forecast: {forecast_date.strftime('%Y-%m-%d %H:00 UTC')}")
     logger.info(f"Region: {args.region}")
     logger.info(f"Scale: {args.scale}x")
+    logger.info(f"Tileset: {MAPBOX_USERNAME}.{args.tileset}")
     
     # Parse forecast hours
     fxx_list = []
