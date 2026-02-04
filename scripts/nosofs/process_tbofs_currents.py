@@ -265,49 +265,62 @@ def extract_surface_currents(
         # Stack u and v into 2 bands
         data = np.stack([u_values, v_values], axis=0)
         
-        # Write separate GeoTIFFs for u and v (Mapbox needs separate files for raster-particle)
+        # Write combined GeoTIFF with 2 bands (u, v) then convert to GRIB
+        # Mapbox raster-particle needs GRIB format with proper metadata
+        
+        temp_tif = output_dir / f"tbofs_currents_{valid_timestamp}_{forecast_part}_temp.tif"
+        output_grib = output_dir / f"tbofs_currents_{valid_timestamp}_{forecast_part}.grib2"
+        
         profile = {
             'driver': 'GTiff',
             'dtype': 'float32',
             'width': width,
             'height': height,
-            'count': 1,
+            'count': 2,
             'crs': CRS.from_epsg(4326),
             'transform': transform,
             'compress': 'deflate',
             'tiled': True,
             'blockxsize': 256,
             'blockysize': 256,
-            'nodata': np.nan
         }
         
-        # U component file
-        u_file = output_dir / f"tbofs_current_u_{valid_timestamp}_{forecast_part}.tif"
-        with rasterio.open(u_file, 'w', **profile) as dst:
-            dst.write(u_values, 1)
-            dst.set_band_description(1, 'u-component of current [m/s]')
-            dst.update_tags(
-                GRIB_VALID_TIME=str(valid_timestamp),
-                GRIB_COMMENT='u-component of current [m/s]',
-                GRIB_SHORT_NAME='UCURR'
-            )
+        # Stack u and v
+        data = np.stack([u_values, v_values], axis=0)
         
-        # V component file
-        v_file = output_dir / f"tbofs_current_v_{valid_timestamp}_{forecast_part}.tif"
-        with rasterio.open(v_file, 'w', **profile) as dst:
-            dst.write(v_values, 1)
-            dst.set_band_description(1, 'v-component of current [m/s]')
-            dst.update_tags(
-                GRIB_VALID_TIME=str(valid_timestamp),
-                GRIB_COMMENT='v-component of current [m/s]',
-                GRIB_SHORT_NAME='VCURR'
-            )
+        # Replace NaN with a fill value for GRIB
+        data = np.nan_to_num(data, nan=-9999.0)
         
-        logger.info(f"✓ Created: {u_file.name}")
-        logger.info(f"✓ Created: {v_file.name}")
+        with rasterio.open(temp_tif, 'w', **profile) as dst:
+            dst.write(data)
         
-        # Return u_file path (both files are in same dir)
-        return u_file
+        logger.info(f"Created temp GeoTIFF: {temp_tif.name}")
+        
+        # Convert to GRIB2 using gdal_translate
+        env = os.environ.copy()
+        env.pop('PROJ_LIB', None)
+        env.pop('PROJ_DATA', None)
+        
+        cmd = [
+            'gdal_translate',
+            '-of', 'GRIB',
+            '-a_nodata', '-9999',
+            str(temp_tif),
+            str(output_grib)
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=120)
+        
+        # Clean up temp file
+        if temp_tif.exists():
+            temp_tif.unlink()
+        
+        if result.returncode != 0:
+            logger.error(f"GRIB conversion failed: {result.stderr}")
+            return None
+        
+        logger.info(f"✓ Created: {output_grib.name}")
+        return output_grib
         
     except Exception as e:
         logger.error(f"Failed to process {nc_file.name}: {e}")

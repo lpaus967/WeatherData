@@ -125,26 +125,7 @@ class MapboxUploader:
                     "tilesize": 512,
                     "resampling": "bilinear",
                     "minzoom": 0,
-                    "maxzoom": 14,  # High zoom for coastal detail
-                    "source_rules": {
-                        # Use GRIB_VALID_TIME for band naming (like wind layer)
-                        "name": ["to-number", ["get", "GRIB_VALID_TIME"]],
-                        "sort_key": ["to-number", ["get", "GRIB_VALID_TIME"]],
-                        "order": "asc",
-                        # Filter for u and v components (Mapbox combines them for particle viz)
-                        "filter": [
-                            [
-                                "all",
-                                ["==", ["get", "GRIB_COMMENT"], "u-component of current [m/s]"],
-                                ["==", ["get", "GRIB_SHORT_NAME"], "UCURR"]
-                            ],
-                            [
-                                "all",
-                                ["==", ["get", "GRIB_COMMENT"], "v-component of current [m/s]"],
-                                ["==", ["get", "GRIB_SHORT_NAME"], "VCURR"]
-                            ]
-                        ]
-                    }
+                    "maxzoom": 14  # High zoom for coastal detail
                 }
             }
         }
@@ -279,13 +260,16 @@ def main():
     logger.info("TBOFS Currents Mapbox Upload")
     logger.info("=" * 60)
     
-    # Find GeoTIFF files
-    tif_files = sorted(args.input_dir.glob("*.tif"))
+    # Find GRIB or GeoTIFF files
+    grib_files = sorted(args.input_dir.glob("*.grib2"))
+    if not grib_files:
+        grib_files = sorted(args.input_dir.glob("*.tif"))
     
-    if not tif_files:
-        logger.error(f"No GeoTIFF files found in {args.input_dir}")
+    if not grib_files:
+        logger.error(f"No GRIB or GeoTIFF files found in {args.input_dir}")
         return 1
     
+    tif_files = grib_files  # Keep variable name for compatibility
     logger.info(f"Found {len(tif_files)} files to upload")
     logger.info(f"Tileset: {MAPBOX_USERNAME}.{args.tileset}")
     
