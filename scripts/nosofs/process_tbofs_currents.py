@@ -16,10 +16,14 @@ Usage:
     python process_tbofs_currents.py --input-dir /tmp/tbofs-data --output-dir /tmp/tbofs-currents
 """
 
+# Fix PROJ database conflicts BEFORE importing rasterio
+import os
+os.environ.pop('PROJ_LIB', None)
+os.environ.pop('PROJ_DATA', None)
+
 import argparse
 import logging
 import sys
-import os
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -74,10 +78,6 @@ def extract_surface_currents(
     Returns:
         Path to output GeoTIFF or None if failed
     """
-    # Fix PROJ database conflicts (Anaconda vs system)
-    os.environ.pop('PROJ_LIB', None)
-    os.environ.pop('PROJ_DATA', None)
-    
     if not XARRAY_AVAILABLE:
         logger.error("xarray is required. Install with: pip install xarray netCDF4")
         return None
