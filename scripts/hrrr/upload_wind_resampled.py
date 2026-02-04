@@ -295,7 +295,9 @@ class MapboxUploader:
         if replace:
             if not await self.delete_tileset_source():
                 return False
-            await asyncio.sleep(5)
+            # Wait for deletion to complete
+            self.logger.info("Waiting for source deletion to complete...")
+            await asyncio.sleep(10)
         
         url = f"https://api.mapbox.com/tilesets/v1/sources/{self.username}/{self.tileset_name}?access_token={self.token}"
         
@@ -324,8 +326,29 @@ class MapboxUploader:
             self.logger.error(f"Upload error: {e}")
             return False
     
-    def create_recipe(self, output_path: Path) -> Path:
-        """Create Mapbox rasterarray recipe."""
+    def create_recipe(self, output_path: Path, use_dynamic_bands: bool = False) -> Path:
+        """
+        Create Mapbox rasterarray recipe.
+        
+        Args:
+            output_path: Path to save the recipe JSON
+            use_dynamic_bands: If True, uses Band_1, Band_2, etc. instead of GRIB_VALID_TIME
+                              This makes the front-end code not need daily updates!
+        """
+        if use_dynamic_bands:
+            # Dynamic band naming - no need to update React code daily!
+            name_expression = [
+                "concat",
+                "Band_",
+                [
+                    "to-string",
+                    ["+", 1, ["index-of", ["get", "GRIB_VALID_TIME"], ["array"]]]
+                ]
+            ]
+        else:
+            # Original: Uses actual GRIB_VALID_TIME (requires React updates)
+            name_expression = ["to-number", ["get", "GRIB_VALID_TIME"]]
+        
         recipe = {
             "version": 1,
             "type": "rasterarray",
@@ -339,7 +362,7 @@ class MapboxUploader:
                     "minzoom": 0,
                     "maxzoom": 12,  # Higher zoom for resampled data
                     "source_rules": {
-                        "name": ["to-number", ["get", "GRIB_VALID_TIME"]],
+                        "name": name_expression,
                         "sort_key": ["to-number", ["get", "GRIB_VALID_TIME"]],
                         "order": "asc",
                         "filter": [
@@ -426,10 +449,17 @@ class MapboxUploader:
 async def upload_to_mapbox(
     grib_files: List[Path],
     tileset_name: str,
-    logger: logging.Logger
+    logger: logging.Logger,
+    use_dynamic_bands: bool = False
 ) -> bool:
     """
     Upload processed GRIB files to Mapbox as rasterarray tileset.
+    
+    Args:
+        grib_files: List of GRIB files to upload
+        tileset_name: Name of the Mapbox tileset
+        logger: Logger instance
+        use_dynamic_bands: If True, uses Band_1, Band_2, etc. for stable band names
     """
     if not MAPBOX_TOKEN:
         logger.error("MAPBOX_ACCESS_TOKEN not set")
@@ -439,25 +469,31 @@ async def upload_to_mapbox(
     
     # Create recipe
     recipe_path = TEMP_DIR / "recipe.json"
-    uploader.create_recipe(recipe_path)
+    uploader.create_recipe(recipe_path, use_dynamic_bands=use_dynamic_bands)
     
     # Upload files
     if not await uploader.upload_files_to_source(grib_files, replace=True):
         return False
     
+    # Wait for upload to be processed
+    logger.info("Waiting for source upload to be processed...")
     await asyncio.sleep(10)
     
     # Create/update tileset
     if not await uploader.create_or_update_tileset(recipe_path):
         return False
     
-    await asyncio.sleep(5)
+    # Wait for recipe update to complete
+    logger.info("Waiting for recipe update to complete...")
+    await asyncio.sleep(15)
     
     # Publish
     if not await uploader.publish():
         return False
     
-    await asyncio.sleep(10)
+    # Wait for publish to start
+    logger.info("Waiting for tileset publish to start...")
+    await asyncio.sleep(20)
     await uploader.check_status()
     
     logger.info(f"\n✓ Tileset available at: mapbox://{MAPBOX_USERNAME}.{tileset_name}")
@@ -482,6 +518,8 @@ def main():
     parser.add_argument('--output-dir', type=Path, default=TEMP_DIR, help='Output directory')
     parser.add_argument('--keep-files', action='store_true', help='Keep intermediate files')
     parser.add_argument('--skip-upload', action='store_true', help='Skip Mapbox upload')
+    parser.add_argument('--dynamic-bands', action='store_true', 
+                        help='Use Band_1, Band_2, etc. instead of timestamps (no frontend updates needed)')
     parser.add_argument('-v', '--verbose', action='store_true', help='Verbose logging')
     
     args = parser.parse_args()
@@ -552,7 +590,12 @@ def main():
         logger.info("Uploading to Mapbox")
         logger.info(f"{'=' * 60}")
         
-        success = asyncio.run(upload_to_mapbox(processed_files, args.tileset, logger))
+        success = asyncio.run(upload_to_mapbox(
+            processed_files, 
+            args.tileset, 
+            logger,
+            use_dynamic_bands=args.dynamic_bands
+        ))
         
         if not success:
             logger.error("Upload failed")
