@@ -74,6 +74,10 @@ def extract_surface_currents(
     Returns:
         Path to output GeoTIFF or None if failed
     """
+    # Fix PROJ database conflicts (Anaconda vs system)
+    os.environ.pop('PROJ_LIB', None)
+    os.environ.pop('PROJ_DATA', None)
+    
     if not XARRAY_AVAILABLE:
         logger.error("xarray is required. Install with: pip install xarray netCDF4")
         return None

@@ -111,6 +111,10 @@ def extract_sst(
     Returns:
         Tuple of (data_tif_path, colored_tif_path) or None if failed
     """
+    # Fix PROJ database conflicts (Anaconda vs system)
+    os.environ.pop('PROJ_LIB', None)
+    os.environ.pop('PROJ_DATA', None)
+    
     if not XARRAY_AVAILABLE or not RASTERIO_AVAILABLE:
         logger.error("Required packages missing")
         return None
